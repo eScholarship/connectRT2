@@ -1,0 +1,12 @@
+bin/
+.bundle/
+config/
+gems/
+logs/
+node_modules/
+tmp/
+.DS_Store
+*.log
+*.out
+*.sql_log
+
