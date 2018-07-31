@@ -1,25 +1,9 @@
-###################################################################################################
-# Use the right paths to everything, basing them on this script's directory.
-def getRealPath(path) Pathname.new(path).realpath.to_s; end
-$homeDir    = ENV['HOME'] or raise("No HOME in env")
-$scriptDir  = getRealPath "#{__FILE__}/.."
-$subiDir    = getRealPath "#{$scriptDir}/.."
-$espylib    = getRealPath "#{$subiDir}/lib/espylib"
-$erepDir    = getRealPath "#{$subiDir}/xtf-erep"
-$arkDataDir = getRealPath "#{$erepDir}/data"
-$controlDir = getRealPath "#{$erepDir}/control"
 
 ###################################################################################################
 # External code modules
 require 'cgi'
-require 'date'
 require 'fileutils'
-require 'nokogiri'
 require 'open3'
-require 'pp'
-require 'httparty'
-$testMode = ARGV.delete('--test')
-require 'sinatra'
 require 'yaml'
 require 'open-uri'
 require 'open4'
@@ -34,9 +18,6 @@ require "#{$espylib}/xmlutil.rb"
 require "#{$espylib}/stringutil.rb"
 require "#{$subiDir}/lib/rawItem.rb"
 require "#{$subiDir}/lib/subiGuts.rb"
-
-# Flush stdout after each write
-STDOUT.sync = true
 
 ###################################################################################################
 # Use absolute paths to executables so we don't depend on PATH env (monit doesn't give us a good PATH)
@@ -53,55 +34,9 @@ $scanMode = false
 class FaultRecorded < StandardError
 end
 
-###################################################################################################
-# Determine what server we're on, based on the host name
-$hostname = `/bin/hostname`.strip
-$server = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'http://submit.escholarship.org:8085'
-  else "http://#{$hostname.sub(/-2[abc]$/,'')}.escholarship.org:8085"
-end
-
-$sshTarget = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'submit.escholarship.org'
-  else "#{$hostname.sub(/-2[abc]$/,'')}.escholarship.org"
-end
-
-# Determine the Elements application server, based on the host name
-$elementsApp = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'https://oapolicy.universityofcalifornia.edu'
-  else 'https://qa-oapolicy.universityofcalifornia.edu'
-end
-
-# Determine the Elements API instance to connect to, based on the host name
-$elementsAPI = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'https://oapolicy.universityofcalifornia.edu:8002/elements-secure-api'
-  else 'https://qa-oapolicy.universityofcalifornia.edu:8002/elements-secure-api'
-end
-
-# Also determine the corresponding public front-end server
-$publicServer = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'https://escholarship.org'
-  else "http://#{$hostname.sub('pub-submit', 'pub-jschol').sub(/-2[abc]/, '')}.escholarship.org"
-end
-
-# Server for previewing not-yet-published files
-$previewServer = case $hostname
-  when 'pub-submit-prd-2a', 'pub-submit-prd-2c'; 'https://submit.escholarship.org'
-  else "https://#{$hostname.sub(/-2[abc]/, '')}.escholarship.org" # e.g. -> pub-submit-stg.escholarship.org
-end
-
 # We'll need to look things up in the arks database, so open it now.
 $arkDb = SQLite3::Database.new("#{$controlDir}/db/arks.db")
 $arkDb.busy_timeout = 30000
-
-# Also we need to look up IDs in the OAP database. Open that too.
-$oapDb = SQLite3::Database.new("#{$subiDir}/oapImport/oap.db")
-$oapDb.busy_timeout = 60000
-
-###################################################################################################
-# For some operations we need to query back to the Elements server
-$apiConn = nil
-$apiMutex = Mutex.new
 
 ###################################################################################################
 # Strings to pick out from <organisational-details>/</group> to determine campus.
@@ -315,10 +250,10 @@ def makeEquiv(pubID, ark)
 
 end
 
-
 ###################################################################################################
 # We receive this post when the user uploads a file to Elements. It may or may
 # not be the first time we see this publication.
+# OLD OLD OLD
 post '/binary' do
   puts "Got binary, params is:"
   pp(params)
@@ -1119,6 +1054,11 @@ def approveItem(ark, who=nil, okToEmail=true)
   # Most of this is rote
   SubiGuts.approveItem(ark, "Submission completed at oapolicy.universityofcalifornia.edu", who)
 
+  # Jam the data into the database, so that immediate API calls will pick it up.
+  Bundler.with_clean_env {  # super annoying that bundler by default overrides sub-bundlers environments
+    checkCall(["#{$jscholDir}/tools/convert.rb", "--preindex", ark.sub("ark:/13030/", "")])
+  }
+
   # Send email only the first time, and never when we're scanning.
   (isNew && !$scanMode && who && okToEmail) and sendNewApprovalEmail(ark, who)
 end
@@ -1332,36 +1272,45 @@ def integrateUciAndFeedEmails(uci, recordPeople, feed, authOrEd)
 end
 
 ###################################################################################################
-def transformPeople(uci, record, feed, authOrEd)
+def transformPeople(uci, metaHash, authOrEd)
 
-  # Complicated logic for merging emails from the feed and the UCI record
-  recordPeople = record.xpath(".//field[@name='#{authOrEd}s']/people/person")
-  recordPeople.length > 0 or return
-  emailForPerson = integrateUciAndFeedEmails(uci, recordPeople, feed, authOrEd)
+  dataBlock = metaHash.delete("#{authOrEd}s") or return
 
   # Now build the resulting UCI author records.
   uci.find!("#{authOrEd}s").rebuild { |xml|
-    recordPeople.each { |person|
-      xml.send(authOrEd) {
-        if person.at("initials") and !person.at("first-name")
-          xml.fname person.at("initials").text
-        end
-        person.at("first-name"   ).try { |e| xml.fname  e.text }
-        person.at("last-name"    ).try { |e| xml.lname  e.text }
-        person.at("suffix"       ).try { |e| xml.suffix e.text }
-        person.at("title"        ).try { |e| xml.title  e.text }
-        personKey1 = personNameKeyAllInitials(person)
-        personKey2 = personNameKeySingleInitial(person)
-        if emailForPerson.include? personKey1
-          #puts "Found email #{emailForPerson[personKey1]} for key1 #{personKey1}"
-          xml.email emailForPerson[personKey1]
-        elsif emailForPerson.include? personKey2
-          #puts "Found email #{emailForPerson[personKey2]} for key2 #{personKey2}"
-          xml.email emailForPerson[personKey2]
+    person = nil
+    dataBlock.split("||").each { |line|
+      line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
+      field, data = $1, $2
+      case field
+        when 'start-person'
+          person = {}
+        when 'lastname'
+          person[:lname] = data
+        when 'firstnames', 'initials'
+          if !person[:fname] || person[:fname].size < data.size
+            person[:fname] = data
+          end
+        when 'email-address', 'resolved-user-email'
+          person[:email] = data
+        when 'resolved-user-orcid'
+          person[:orcid] = data
+        when 'identifier'
+          puts "TODO: Handle identifiers like #{data.inspect}"
+        when 'end-person'
+          if !person.empty?
+            puts "Sending person #{person.inspect}"
+            xml.send(authOrEd) {
+              person[:fname] and xml.fname(person[:fname])
+              person[:lname] and xml.lname(person[:lname])
+              person[:email] and xml.email(person[:email])
+              person[:orcid] and xml.identifier(:type => 'ORCID') { |xml| xml.text person[:orcid] }
+            }
+          end
+          person = nil
         else
-          #puts "No email for either #{personKey1} nor #{personKey2}"
-        end
-      }
+          raise("Unexpected person field #{field.inspect}")
+      end
     }
   }
 end
@@ -1396,6 +1345,16 @@ end
 # NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
 # Options: ark, fileVersion
 def uciFromFeed(uci, feed, **opt)
+
+  # Parse out the flat list of metadata from the feed
+  metaHash = {}
+  feed.xpath(".//metadataentry").each { |ent|
+    key = ent.text_at('key')
+    value = ent.text_at('value')
+    metaHash.key?(key) and raise("double key #{key}")
+    metaHash[key] = value
+  }
+
   # The easy top-level attributes
   if opt[:ark]
     uci[:id] = uci[:id] || opt[:ark].sub(%r{ark:/?13030/}, '')
@@ -1407,301 +1366,70 @@ def uciFromFeed(uci, feed, **opt)
   uci[:stateDate] = uci[:stateDate] || DateTime.now.iso8601
 
   # Figure out the publication ID
-  pubID = nil
-  feed.xpath("id").each { |el|
-    if el.text =~ /^\d+$/
-      pubID = el.text
-    end
-  }
-  pubID or raise("Can't find pub ID in feed.")
+  pubID = metaHash.delete('elements-pub-id') or raise("can't find pub ID in feed")
 
   # Publication type is a bit tricky
-  pubType = nil
-  feed.xpath("//category[@scheme='http://www.symplectic.co.uk/publications/atom-terms/1.0']/@term |
-              //object[(@category='publication')]/@type").each { |attr|
-    pubType = case attr.to_s
-      when %r{/(journal-article|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'paper'
-      when %r{/(dataset|poster|media|presentation|other)$}; 'non-textual'
-      when %r{/book$}; 'monograph'
-      when %r{/chapter$}; 'chapter'
-      else pubType
-    end
-  }
-  # This happens occasionally when Elements changes or adds publication types. J
-  pubType or raise "Can't find recognized pubType"
-  uci[:type] = pubType
-
-  # Embargo processing
-  if uci[:embargoDate] && (uci[:state] == 'published' || uci.xpath("history/stateChange[@state='published']")) &&
-     uci.xpath("source") == 'subi'
-    # Do not allow embargo of published item to be overridden. Why? Because say somebody edits a
-    # record from Subi using Elements -- they may not be aware there was an embargo, and Elements
-    # would blithely un-embargo it.
-  else
-    if feed.at("//field[@name='confidential']/boolean").try{ |b| b.text } == 'true'
-      uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
-    else
-      (feed.xpath("//field[@name='requested-embargo-period']/text") +
-       feed.xpath("//field[@name='p-requested-embargo-period']/text")).each { |t|
-        period = t.text
-        case period
-          when /Not known|No embargo/
-            uci.xpath("@embargoDate").remove
-          when /Indefinite/
-            uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
-          when /^(\d+) month(s?)/
-            history = uci.at 'history'
-            baseDate = (history && history.at('escholPublicationDate')) ?
-                         Date.parse(history.at('escholPublicationDate').text) : Date.today
-            uci[:embargoDate] = (baseDate >> ($1.to_i)).iso8601
-          else
-            raise "Unknown embargo period format: '#{period}'"
-        end
-      }
-    end
+  pubTypeStr = metaHash.delete('object.type') or raise("metadata missing object.type")
+  uci[:type] = case pubTypeStr
+    when %r{^(journal-article|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'paper'
+    when %r{^(dataset|poster|media|presentation|other)$}; 'non-textual'
+    when "book"; 'monograph'
+    when "chapter"; 'chapter'
+    else raise "Can't recognize pubType #{pubTypeStr.inspect}" # Happens when Elements changes or adds types
   end
 
-  # Publication status
-  if feed.at("//data-source/source-name").try(:text) == 'manual-entry'
-    uci[:pubStatus] = feed.at("//field[@name='publication-status']/text").try(:text) == 'Published' ?
-                      'externalPub' : 'internalPub'
-  else
-    uci[:pubStatus] = 'externalPub'
-  end
-
-  # Publication version
-  if opt[:fileVersion] && opt[:fileVersion] != 'Supporting information'
-    uci[:externalPubVersion] = case opt[:fileVersion]
-      when /(Author final|Submitted) version/; 'authorVersion'
-      when "Published version"; 'publisherVersion'
-      else raise "Unrecognized file version '#{opt[:fileVersion]}'"
-    end
-  end
-
-  # New-style CC license data
-  feed.xpath("//field[@name='p-author-license']/text").each { |t|
-    licName = t.text
-    rightsEl = uci.find! 'rights'
-    rightsEl.content = case licName
-      when 'CC BY';       'cc1'
-      when 'CC BY-SA';    'cc2'
-      when 'CC BY-ND';    'cc3'
-      when 'CC BY-NC';    'cc4'
-      when 'CC BY-NC-SA'; 'cc5'
-      when 'CC BY-NC-ND'; 'cc6'
-      when 'escholarship_deposit_agreement.txt'; 'public'
-      else raise "Unrecognized author license name #{licName}"
-    end
-  }
-  unless uci.at('rights')
-    puts "Warning: no rights found, using 'public'"
-    uci.find!('rights').content = 'public'
-  end
 
   # Author and editor metadata. Use the preferred record if specified.
-  record = getPreferredRecord(feed)
-  transformPeople(uci, record, feed, 'author')
-  transformPeople(uci, record, feed, 'editor')
+  transformPeople(uci, metaHash, 'author')
+  transformPeople(uci, metaHash, 'editor')
 
   # Other top-level fields
   uci.find!('source').content = 'oa_harvester'
-  record.at(".//field[@name='title']").try { |e| uci.find!('title').content = e.text }
-  record.at(".//field[@name='abstract']/text").try { |e| uci.find!('abstract').content = e.text }
-  record.at(".//field[@name='doi']").try { |e| uci.find!('doi').content = e.text }
-  record.xpath(".//field[@name='pagination'][1]/pagination").each { |pg|
-    uci.find!('extent').rebuild { |xml|
-      pg.at("begin-page").try { |e| xml.fpage e.text }
-      pg.at("end-page").try { |e| xml.lpage e.text }
-    }
-  }
-  record.at(".//field[@name='keywords'][1]/keywords").try { |outer|
-    uci.find!('keywords').rebuild { |xml|
-      outer.xpath("keyword").each { |kw|
-        xml.keyword kw.text
-      }
-    }
-  }
-
-  # funding section
-  if feed.at("//grants/grant/records/record")
-    fundingEl = uci.find! 'funding'
-    fundingEl.rebuild { |xml|
-      feed.xpath("//grants/grant/records/record[1]").each { |newGrant|
-        xml.grant(:id => newGrant.text_at(".//id-at-source"),
-                  :name => newGrant.text_at(".//field[@name='funder-name']/text"),
-                  :reference => newGrant.text_at(".//field[@name='funder-reference']/text"))
-      }
-    }
-  end
+  metaHash.key?('title') and uci.find!('title').content = metaHash.delete('title')
+  ##record.at(".//field[@name='abstract']/text").try { |e| uci.find!('abstract').content = e.text }
+  ##record.at(".//field[@name='doi']").try { |e| uci.find!('doi').content = e.text }
+  ##record.xpath(".//field[@name='pagination'][1]/pagination").each { |pg|
+  ##  uci.find!('extent').rebuild { |xml|
+  ##    pg.at("begin-page").try { |e| xml.fpage e.text }
+  ##    pg.at("end-page").try { |e| xml.lpage e.text }
+  ##  }
+  ##}
+  ##record.at(".//field[@name='keywords'][1]/keywords").try { |outer|
+  ##  uci.find!('keywords').rebuild { |xml|
+  ##    outer.xpath("keyword").each { |kw|
+  ##      xml.keyword kw.text
+  ##    }
+  ##  }
+  ##}
 
   # Things that go inside <context>
   contextEl = uci.find! 'context'
   oldEntities = contextEl.xpath(".//entity").dup    # record old entities so we can reconstruct and add to them
   contextEl.rebuild { |xml|
-    if pubID
       xml.localID(:type => 'oa_harvester') {
         xml.text pubID
       }
-    end
-
-    # capture the repec ID if present
-    if feed.at("//entry/data-source[source-name='repec']")
-      xml.localID(:type => 'repec') {
-        xml.text feed.text_at("//entry/data-source[source-name='repec']/id-at-source")
-      }
-    end
-
-    # capture the LBNL report number if present
-    if feed.at("//feed/category[@label='report']")
-      if feed.at("//entry[data-source[source-name='manual-entry']]/bibliographic-data/native/field[@name='number']")
-        xml.localID(:type => 'lbnl') {
-          xml.text feed.text_at("//entry[data-source[source-name='manual-entry']]/bibliographic-data/" +
-                                "native/field[@name='number']/text")
-        }
-      end
-    end
-    # Making sure the UCPMS pub type makes it into the eSchol metadata
-    feed.xpath("//category[@scheme='http://www.symplectic.co.uk/publications/atom-terms/1.0']/@term").each { |upt|
-      if upt.to_s =~ %r{(journal-article|book|chapter|conference-proceeding|
-                         internet-publication|scholarly-edition|report|dataset|
-                         poster|media|presentation|other)$}x
-        type_value = upt.to_s.gsub(/.+\//, '')
-        xml.ucpmsPubType {
-          xml.text type_value
-        }
-      end
-    }
-
-    record.at(".//field[@name='issn']"   ).try { |e| xml.issn e.text }
-    record.at(".//field[@name='isbn-13']"  ).try { |e| xml.isbn e.text }  # for books and chapters
-    record.at(".//field[@name='journal']").try { |e| xml.journal e.text }
-    record.at(".//field[@name='journal' and @display-name='Published proceedings']").try { |e| xml.proceedings e.text }
-    record.at(".//field[@name='volume']" ).try { |e| xml.volume e.text }
-    record.at(".//field[@name='issue']"  ).try { |e| xml.issue e.text }
-    record.at(".//field[@name='parent-title']"  ).try { |e| xml.bookTitle e.text }  # for chapters
-
-    feed.at(".//field[@name='p-oa-location']").try { |e|
-      xml.publishedWebLocation e.text
-    }
-  }
-
-  # Restore all the old entities
-  # Cleanup here for rgpo
-  entsAdded = Set.new
-  oldEntities.each { |oldEnt|
-    # skipping previously introduced RGPO errors
-    next if ["cbcrp_rw","chrp_rw","trdrp_rw","ucri_rw"].include? oldEnt[:id]
-    if !entsAdded.include? oldEnt[:id]
-      contextEl << oldEnt.dup
-      entsAdded << oldEnt[:id]
-    end
-  }
-
-  # Add any missing campus series.
-  # According to Martin the entity order of campus postprint series determines the primary affiliation
-  # and not the primaryAffiliation attribute.
-  # Note that, for LBNL joint appointees, we want the campus to be primary, hence the specially sorting
-  campuses = determineCampuses(feed)
-  sortedCampuses = campuses.sort { |a, b|
-    (a=='lbnl' ? 'xxx' : a) <=> (b=='lbnl' ? 'xxx' : b)
-  }
-  sortedCampuses.each { |campus|
-    series = (campus == 'lbnl') ? 'lbnl_rw' : "#{campus}_postprints"
-    label  = (campus == 'lbnl') ? "LBNL Recent Work" : "#{campus.upcase} Previously Published Works"
-    addUniqueEntity(contextEl,series,label,"series",entsAdded)
-  }
-
-  # Direct Series Deposit Logic
-  # These will never be the primary affiliation
-  allStructPath = "/apps/eschol/erep/xtf/style/textIndexer/mapping/allStruct.xml"
-  io = File.open(allStructPath, "r")
-  allStruct = Nokogiri::XML(io, &:noblanks).root
-
-  feed.xpath("//organisational-details/group/@org-id").each { |oid|
-
-    oid=oid.to_s # making sure it's a string
-
-    if allStruct.at("//div[@elementsID='#{oid}']")
-      series = allStruct.at("//div[@elementsID='#{oid}']/@id").text
-      label = allStruct.at("//div[@elementsID='#{oid}']/@label").text
-      addUniqueEntity(contextEl,series,label,"series",entsAdded)
-    end
-
-    # RGPO entity assignment block
-    # Is there a user in one of the RGPO groups?
-    if ["784", "785", "786", "787"].include?(oid)
-      puts "\nRGPO Entity Assignment (#{pubID}): RGPO group ID detected: #{oid}"
-
-      # Completion is not really recorded in the feed so have to check
-      # the UCI metadata first and then fall back to the feed 'updated'
-      # date if there is nothing there
-      uci_completed = uci.text_at("//history/escholPublicationDate").to_s
-      feed_completed = feed.text_at("//feed/updated").to_s
-      if Date.parsable?(uci_completed)
-        completionDate = Date.parse(uci_completed, "%d-%m-%Y")
-      else
-        completionDate = Date.parse(feed_completed, "%d-%m-%Y")
-      end
-
-      # Was the publication completed on or after August 1st 2017
-      if completionDate >= Date.parse("01-08-2017", "%d-%m-%Y")
-        puts "RGPO Entity Assignment (#{pubID}): Completion Date: #{completionDate} is on or after 2017-08-01"
-        # Create an entity for each RGPO grant
-        rgpoFlag=false
-        feed.xpath("//grants/grant//field[@name='funder-name']/text").each { |funder|
-          case funder
-            when /CBCRP/
-              rgpoFlag=true
-              puts "RGPO Entity Assignment (#{pubID}): Assigned to cbcrp_rw"
-              addUniqueEntity(contextEl,"cbcrp_rw","Recent Work","series",entsAdded)
-            when /CHRP/
-              rgpoFlag=true
-              puts "RGPO Entity Assignment (#{pubID}): Assigned to chrp_rw"
-              addUniqueEntity(contextEl,"chrp_rw","Recent Work","series",entsAdded)
-            when /TRDRP/
-              rgpoFlag=true
-              puts "RGPO Entity Assignment (#{pubID}): Assigned to trdrp_rw"
-              addUniqueEntity(contextEl,"trdrp_rw","Recent Work","series",entsAdded)
-            when /UCRI/
-              rgpoFlag=true
-              puts "RGPO Entity Assignment (#{pubID}): Assigned to ucri_rw"
-              addUniqueEntity(contextEl,"ucri_rw","Recent Work","series",entsAdded)
-          end
-        }
-        # Logging lack of grant link for a publication completed after 2017-08-01
-        if !rgpoFlag
-          puts "RGPO Entity Assignment (#{pubID}): Logging lack of grant link for a publication completed after 2017-08-01"
-        end
-      # Fall back to rgpo_rw for publication completed before 2017-08-01
-      else
-        puts "RGPO Entity Assignment (#{pubID}): Completion Date: #{completionDate} is before 2017-08-01"
-        addUniqueEntity(contextEl,"rgpo_rw","Recent Work","series",entsAdded)
-        puts "RGPO Entity Assignment (#{pubID}): Falling back to rgpo_rw for publication completed before 2017-08-01"
-      end
-    end
+      metaHash.key?("oa-location-url") and xml.publishedWebLocation(metaHash.delete("oa-location-url"))
   }
 
   # Things that go inside <history>
-  authorPerson = findAuthorPerson(feed)
+  who = metaHash.delete('depositor-email') or raise("metadata missing depositor-email")
   history = uci.find! 'history'
   history[:origin] = 'oa_harvester'
   history.at("escholPublicationDate") or history.find!('escholPublicationDate').content = Date.today.iso8601
   history.at("submissionDate") or history.find!('submissionDate').content = Date.today.iso8601
-  record.xpath(".//field[@name='publication-date' or @name='online-publication-date'][1]/date").each { |pd|
-    year  = pd.at('year').try(:text) || 0
-    month = pd.at('month').try(:text) || 1
-    day   = pd.at('day').try(:text) || 1
-    history.find!('originalPublicationDate').content = "%04d-%02d-%02d" % [year.to_i, month.to_i, day.to_i]
-    if authorPerson && authorPerson.at('email-address') and !history.at("stateChange")
-      history.build { |xml|
-        xml.stateChange(:state => 'new',
-                        :date  => DateTime.now.iso8601,
-                        :who   => authorPerson.at('email-address').text) {
-          xml.comment_ "Claimed at oapolicy.universityofcalifornia.edu"
-        }
+  dateIssued = metaHash.delete('date.issued') or raise("metadata missing 'date.issued'")
+  dateIssued =~ /^20\d\d-[01]\d-[0123]\d$/ or raise("Unrecognized date.issued format: #{dateIssued.inspect}")
+  history.find!('originalPublicationDate').content = dateIssued
+  if !history.at("stateChange")
+    history.build { |xml|
+      xml.stateChange(:state => 'new',
+                      :date  => DateTime.now.iso8601,
+                      :who   => who) {
+        xml.comment_ "Claimed at oapolicy.universityofcalifornia.edu"
       }
-    end
-  }
+    }
+  end
 end
 
 def addUniqueEntity (contextEl, id, label, type, entsAdded)
@@ -2085,13 +1813,6 @@ def checkForMetaUpdate(pubID, ark, feedMeta, updateTime)
     return
   end
 
-  # A few feeds no longer have authorship, and we don't know how to deal with that.
-  # So just skip them.
-  if !findAuthorPerson(feedMeta)
-    puts "Warning: Feed contains no authorship relationship. Skipping."
-    return
-  end
-
   # If no changes, nothing to do.
   unless isMetaChanged(ark, feedMeta)
     puts "No significant changes."
@@ -2102,12 +1823,9 @@ def checkForMetaUpdate(pubID, ark, feedMeta, updateTime)
   # No clear idea who the change should be attributed to, but I see "user" in the feed
   # so let's grab that.
   puts "Changed."
-  if $testMode
-    puts "...skipping update because we're in test mode."
-    return
-  end
 
-  who = feedMeta.at("//users/user[1]/email-address").try{|e| e.text.to_s}
+  #who = feedMeta.at("//users/user[1]/email-address").try{|e| e.text.to_s}
+  who = nil; puts "TODO: parse who"
   editItem(ark, who, pubID)
   File.open(arkToFile(ark, "next/meta/base.feed.xml", true), "w") { |io| feedMeta.write_xml_to io }
 
@@ -2115,7 +1833,7 @@ def checkForMetaUpdate(pubID, ark, feedMeta, updateTime)
   updateMetadata(ark)
 
   # If the item has been approved, push this change all the way through.
-  approveItem(ark, who) if isGranted(ark)
+  #approveItem(ark, who) if isGranted(ark)
 end
 
 ###################################################################################################

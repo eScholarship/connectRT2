@@ -1,28 +1,14 @@
 # A DSpace wrapper around escholarship, used to integrate eschol content into Symplectic Elements
 
-require 'date'
 require 'digest'
 require 'erubis'
-require 'httparty'
-require 'nokogiri'
-require 'json'
-require 'pp'
 require 'securerandom'
-require 'time'
 require 'xmlsimple'
 
 $rt2creds = JSON.parse(File.read("#{$homeDir}/.passwords/rt2_adapter_creds.json"))
 
 $sessions = {}
 MAX_SESSIONS = 5
-
-# Go to the right API server (stg for stg, prd for prd)
-$host = `/bin/hostname`.strip
-$apiServer = case $host
-  when /pub-submit-stg/; "http://pub-jschol-stg.escholarship.org/graphql"
-  when /pub-submit-prd/; "https://escholarship.org/graphql"
-  otherwise raise("unexpected host #{$host.inspect}")
-end
 
 ###################################################################################################
 # Nice way to generate XML, just using ERB-like templates instead of Builder's weird syntax.
@@ -45,12 +31,20 @@ def apiQuery(query, vars = {}, privileged = false)
     query = "query(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{query} }"
   end
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
-  response = HTTParty.post("https://escholarship.org/graphql",
-               :headers => { 'Content-Type': 'application/json' },
+  headers = { 'Content-TypeX' => 'application/jsonx' }
+  privileged and headers['Privileged'] = $rt2creds['graphqlApiKey']
+  response = HTTParty.post("#{$escholServer}/graphql",
+               :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
-  # FIXME: handle 'privileged'
   response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
   response['data']
+end
+
+###################################################################################################
+# Proxy an OAI query over to the eschol API server, and return its results
+def serveOAI(params)
+  response = HTTParty.get("#{$escholServer}/oai", query: params)
+  [response.code, response.body]
 end
 
 ###################################################################################################
@@ -94,7 +88,7 @@ get "/dspace-rest/status" do
 end
 
 ###################################################################################################
-get "/dspace-rest/login" do
+post "/dspace-rest/login" do
   content_type "text/plain;charset=utf-8"
   params['email'] == $rt2creds['email'] && params['password'] == $rt2creds['password'] or halt(401, "Unauthorized.\n")
   $sessions[getSession][:loggedIn] = true
@@ -110,7 +104,7 @@ end
 
 ###################################################################################################
 get "/dspace-rest/collections" do
-  #verifyLoggedIn # FIXME  - put back
+  verifyLoggedIn
   content_type "text/xml"
   inner = %w{cdl_rw iis_general root}.map { |unitID|
     data = apiQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
@@ -148,8 +142,9 @@ def stripHTML(encoded)
 end
 
 ###################################################################################################
-def dspaceItems
-  verifyLoggedIn
+get %r{/dspace-rest/(items|handle)/(.*)} do
+  #verifyLoggedIn
+  puts "FIXME: check logged in for items"
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
   itemFields = %{
@@ -295,86 +290,80 @@ def dspaceItems
 end
 
 ###################################################################################################
-# Convert an elements publication GUID to an ARK on our system. This will create
-# a new ark if we haven't seen the publication before.
-def mintArk(pubGuid)
-  ark = `#{$controlDir}/tools/mintArk.py elements #{pubGuid}`.strip()
-  return (ark =~ %r<^ark:/?13030/\w{10}$>) ? ark : raise("bad result '#{ark}' from mintArk")
-end
-
-###################################################################################################
-def dspaceSwordPost
-  request.path =~ %r{collection/13030} or raise   # we only actually support the one sword API
-
-  # Parse the body as XML, and locate the <entry>
-  request.body.rewind
-  body = Nokogiri::XML(request.body.read)
-  body.remove_namespaces!
-  entry = body.xpath("entry")
-  entry or raise("can't locate <entry> in request: #{body}")
-
-  # Grab the Elements GUID for this publication
-  title = entry.xpath("title")
-  title or raise("can't locate <title> in entry: #{body}")
-  title = title.text
-  guid = title[/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/] or raise("can't find guid in title #{title.inspect}")
-
-  # Make an eschol ARK for this pub
-  #ark = mintArk(guid)
-  #puts "ark=#{ark}"
+post "/dspace-swordv2/collection/13030/:collection" do |collection|
 
   # POST /dspace-swordv2/collection/13030/cdl_rw
   # with data <entry xmlns="http://www.w3.org/2005/Atom">
   #              <title>From Elements (0be0869c-6f32-48eb-b153-3f980b217b26)</title></entry>
-  # TODO - customize raw response
+  #              ...
+
+  # Parse the body as XML, and locate the <entry>
+  request.body.rewind
+  body = Nokogiri::XML(request.body.read).remove_namespaces!
+  puts "Sword post body: #{body}"
+  puts "env: #{request.env}"
+  entry = body.xpath("entry") or raise("can't locate <entry> in request: #{body}")
+
+  # Grab the Elements GUID for this publication
+  title = (entry.xpath("title") or raise("can't locate <title> in entry: #{body}")).text
+  guid = title[/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/] or raise("can't find guid in title #{title.inspect}")
+
+  # Make an eschol ARK for this pub (if we've seen the pub before, the same old ark will be returned)
+  ark = mintArk(guid)
+
+  # Return a customized XML response.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
   [201, xmlGen('''
     <entry xmlns="http://www.w3.org/2005/Atom">
-      <content src="https://pub-submit-stg.escholarship.org/swordv2/edit-media/a2c851b6-b734-4764-a34c-1b785a6cdc7c"
-               type="application/zip"/>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/edit-media/a2c851b6-b734-4764-a34c-1b785a6cdc7c"
-            rel="edit-media" type="application/zip"/>
-      <title xmlns="http://purl.org/dc/terms/"><%= title %></title>
-      <title type="text"><%= title %></title>
+      <content src="<%=$submitServer%>/swordv2/edit-media/<%=ark%>" type="application/zip"/>
+      <link href="<%=$submitServer%>/swordv2/edit-media/<%=ark%>"rel="edit-media" type="application/zip"/>
+      <title xmlns="http://purl.org/dc/terms/"><%=title%></title>
+      <title type="text"><%=title%></title>
       <rights type="text"/>
-      <updated>2018-07-06T07:00:00.000Z</updated>
+      <updated><%=DateTime.now.iso8601%></updated>
       <generator uri="http://escholarship.org/ns/dspace-sword/1.0/" version="1.0">help@escholarship.org</generator>
-      <id>https://pub-submit-stg.escholarship.org/swordv2/edit/a2c851b6-b734-4764-a34c-1b785a6cdc7c</id>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/edit/a2c851b6-b734-4764-a34c-1b785a6cdc7c" rel="edit"/>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/edit/a2c851b6-b734-4764-a34c-1b785a6cdc7c"
-            rel="http://purl.org/net/sword/terms/add"/>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/edit-media/a2c851b6-b734-4764-a34c-1b785a6cdc7c.atom"
-            rel="edit-media" type="application/atom+xml; type=feed"/>
+      <id><%=$submitServer%>/swordv2/edit/<%=ark%></id>
+      <link href="<%=$submitServer%>/swordv2/edit/<%=ark%>" rel="edit"/>
+      <link href="<%=$submitServer%>/swordv2/edit/<%=ark%>"rel="http://purl.org/net/sword/terms/add"/>
+      <link href="<%=$submitServer%>/swordv2/edit-media/<%=ark%>.atom" rel="edit-media"
+            type="application/atom+xml; type=feed"/>
       <packaging xmlns="http://purl.org/net/sword/terms/">http://purl.org/net/sword/package/SimpleZip</packaging>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/statement/a2c851b6-b734-4764-a34c-1b785a6cdc7c.rdf"
-            rel="http://purl.org/net/sword/terms/statement" type="application/rdf+xml"/>
-      <link href="https://pub-submit-stg.escholarship.org/swordv2/statement/a2c851b6-b734-4764-a34c-1b785a6cdc7c.atom"
-            rel="http://purl.org/net/sword/terms/statement" type="application/atom+xml; type=feed"/>
       <treatment xmlns="http://purl.org/net/sword/terms/">A metadata only item has been created</treatment>
-      <link href="https://pub-submit-stg.escholarship.org/jspui/view-workspaceitem?submit_view=Yes&amp;workspace_id=10"
-            rel="alternate"/>
     </entry>''', binding, xml_header: false)]
 end
 
 ###################################################################################################
-def dspaceMetaPut
-  request.body.rewind
-  puts "dspaceMetaPut: body=#{request.body.read}"
+put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # PUT /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/metadata
   # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
   #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
+  #                            ...
+
+  # The ID should be an ARK, obtained earlier from the Sword post.
+  itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
+
+  # Grab the body. It should be an XML set of metadata entries.
+  request.body.rewind
+  body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
+  puts "dspaceMetaPut: body=#{body.to_xml}"
+  puts "end: #{request.env}"
+
+  # Update the metadata on disk
+  checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
+
+  # All done.
   content_type "text/plain"
   nil  # content length zero, and HTTP 200 OK
 end
 
 ###################################################################################################
-def dspaceBitstreamPost
+post "/dspace-rest/items/:itemGUID/bitstreams" do |itemGUID|
   content_type "text/xml"
   # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
   # TODO - customize raw response
   xmlGen('''
     <bitstream>
-      <link>/rest/bitstreams/a2c851b6-b734-4764-a34c-1b785a6cdc7c</link>
+      <link>/rest/bitstreams/qtmm123456</link>
       <expand>parent</expand>
       <expand>policies</expand>
       <expand>all</expand>
@@ -386,21 +375,32 @@ def dspaceBitstreamPost
       <description>Accepted version</description>
       <format>Adobe PDF</format>
       <mimeType>application/pdf</mimeType>
-      <retrieveLink>/rest/bitstreams/a2c851b6-b734-4764-a34c-1b785a6cdc7c/retrieve</retrieveLink>
+      <retrieveLink>/rest/bitstreams/qtmm123456/retrieve</retrieveLink>
       <sequenceId>-1</sequenceId>
       <sizeBytes>61052</sizeBytes>
     </bitstream>''', binding)
 end
 
 ###################################################################################################
-def dspaceEdit
+post "/dspace-swordv2/edit/:itemGUID" do |itemID|
   # POST /dspace-swordv2/edit/4463d757-868a-42e2-9aab-edc560089ca1
+  request.body.rewind
   # Not sure what we receive here, nor what we should reply. Original log was incomplete
   # because Sword rejected the URL due to misconfiguration.
+
+  # Maybe this is a signal that it's time to publish this thing?
+  itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
+  approveItem("ark:/13030/#{itemID}", nil, false)
+
+  # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
+  content_type "application/atom+xml; type=entry;charset=UTF-8"
+  [200, xmlGen('''
+    <entry xmlns="http://www.w3.org/2005/Atom"
+    </entry>''', binding, xml_header: false)]
 end
 
 ###################################################################################################
-def dspaceOAI
+get "/dspace-oai" do
   if params['verb'] == 'ListSets'
     content_type "text/xml"
     xmlGen('''
@@ -432,22 +432,6 @@ def dspaceOAI
     else
       params['verb'] == 'ListIdentifiers' and params.delete('from') # Disable differential harvest for now
     end
-    serveOAI
-  end
-end
-
-###################################################################################################
-def serveDSpace(op)
-  puts "serveDSpace: op=#{op} path=#{request.path} params=#{params}"
-  case "#{op} #{request.path}"
-    when %r{GET /dspace-rest/status};          dspaceStatus
-    when %r{GET /dspace-rest/(items|handle)/}; dspaceItems
-    when %r{GET /dspace-rest/collections};     dspaceCollections
-    when %r{POST /dspace-rest/login};          dspaceLogin
-    when %r{GET /dspace-oai};                  dspaceOAI
-    when %r{POST /dspace-swordv2};             dspaceSwordPost
-    when %r{PUT /dspace-rest/items};           dspaceMetaPut
-    when %r{POST /dspace-rest/items};          dspaceBitstreamPost
-    else halt(404, "Not found.\n")
+    return serveOAI(params)
   end
 end
