@@ -289,6 +289,8 @@ def depositFile(ark, filename, fileVersion, inStream)
   end
 
   # Insert UCI metadata for the uploaded file
+  outMimeType = uploadedMimeType
+  outSize = File.size(uploadedPath)
   editXML(arkToFile(ark, "next/meta/base.meta.xml")) do |meta|
     partialUploadedPath = uploadedPath.sub(%r{.*/content/}, 'content/')
     contentEl = meta.find! 'content', before:'context'
@@ -338,9 +340,11 @@ def depositFile(ark, filename, fileVersion, inStream)
   # If we had to force a content file into supp, note it as an item fault.
   if forcedSupp
     recordFault(ark, false, 'no_document',
-                "User '#{who}' uploaded non-doc file '#{filename}' as document for Elements pub #{pubID} (#{ark}). " +
+                "User uploaded non-doc file '#{filename}' as document for #{ark}. " +
                 "Treated as a supp file. We need to review this item.")
   end
+
+  return filename, outSize, outMimeType
 end
 
 ###################################################################################################
@@ -1447,8 +1451,13 @@ def uciFromFeed(uci, feed, **opt)
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
     value = ent.text_at('value')
-    metaHash.key?(key) and raise("double key #{key}")
-    metaHash[key] = value
+    if key == 'keywords'
+      metaHash[key] ||= []
+      metaHash[key] << value
+    else
+      metaHash.key?(key) and raise("double key #{key}")
+      metaHash[key] = value
+    end
   }
 
   # The easy top-level attributes
@@ -1482,21 +1491,25 @@ def uciFromFeed(uci, feed, **opt)
   # Other top-level fields
   uci.find!('source').content = 'oa_harvester'
   metaHash.key?('title') and uci.find!('title').content = metaHash.delete('title')
-  ##record.at(".//field[@name='abstract']/text").try { |e| uci.find!('abstract').content = e.text }
-  ##record.at(".//field[@name='doi']").try { |e| uci.find!('doi').content = e.text }
-  ##record.xpath(".//field[@name='pagination'][1]/pagination").each { |pg|
-  ##  uci.find!('extent').rebuild { |xml|
-  ##    pg.at("begin-page").try { |e| xml.fpage e.text }
-  ##    pg.at("end-page").try { |e| xml.lpage e.text }
-  ##  }
-  ##}
-  ##record.at(".//field[@name='keywords'][1]/keywords").try { |outer|
-  ##  uci.find!('keywords').rebuild { |xml|
-  ##    outer.xpath("keyword").each { |kw|
-  ##      xml.keyword kw.text
-  ##    }
-  ##  }
-  ##}
+  metaHash.key?('abstract') and uci.find!('abstract').content = metaHash.delete('abstract')
+  metaHash.key?('doi') and uci.find!('doi').content = metaHash.delete('doi')
+  if metaHash.key?('fpage') || metaHash.key?('lpage')
+    uci.find!('extent').rebuild { |xml|
+      metaHash.key?('fpage') and xml.fpage(metaHash.delete('fpage'))
+      metaHash.key?('lpage') and xml.lpage(metaHash.delete('lpage'))
+    }
+  end
+  if metaHash.key?('keywords')
+    uci.find!('keywords').rebuild { |xml|
+      # Transform "1505 Marketing (for)" to just "Marketing"
+      metaHash.delete('keywords').map { |kw|
+        # Remove scheme at end and initial series of digits
+        kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
+      }.uniq.each { |kw|
+        xml.keyword kw
+      }
+    }
+  end
 
   # Things that go inside <context>
   contextEl = uci.find! 'context'
@@ -1505,6 +1518,13 @@ def uciFromFeed(uci, feed, **opt)
       xml.localID(:type => 'oa_harvester') {
         xml.text pubID
       }
+      metaHash.key?("issn") and xml.issn(metaHash.delete("issn"))
+      metaHash.key?("isbn-13") and xml.isbn(metaHash.delete("isbn-13")) # for books and chapters
+      metaHash.key?("journal") and xml.journal(metaHash.delete("journal"))
+      # TODO: deal with proceedings
+      metaHash.key?("volume") and xml.volume(metaHash.delete("volume"))
+      metaHash.key?("issue") and  xml.issue(metaHash.delete("issue"))
+      #metaHash.key?("parent-title") and xml.bookTitle e.text }  # for chapters
       metaHash.key?("oa-location-url") and xml.publishedWebLocation(metaHash.delete("oa-location-url"))
   }
 
@@ -1514,15 +1534,15 @@ def uciFromFeed(uci, feed, **opt)
   history[:origin] = 'oa_harvester'
   history.at("escholPublicationDate") or history.find!('escholPublicationDate').content = Date.today.iso8601
   history.at("submissionDate") or history.find!('submissionDate').content = Date.today.iso8601
-  dateIssued = metaHash.delete('date.issued') or raise("metadata missing 'date.issued'")
-  dateIssued =~ /^20\d\d-[01]\d-[0123]\d$/ or raise("Unrecognized date.issued format: #{dateIssued.inspect}")
-  history.find!('originalPublicationDate').content = dateIssued
+  pubData = metaHash.delete('publication-date') or raise("metadata missing 'date.issued'")
+  pubData =~ /^20\d\d-[01]\d-[0123]\d$/ or raise("Unrecognized date.issued format: #{pubData.inspect}")
+  history.find!('originalPublicationDate').content = pubData
   if !history.at("stateChange")
     history.build { |xml|
       xml.stateChange(:state => 'new',
                       :date  => DateTime.now.iso8601,
                       :who   => who) {
-        xml.comment_ "Claimed at oapolicy.universityofcalifornia.edu"
+        xml.comment_ "Deposited at oapolicy.universityofcalifornia.edu"
       }
     }
   end

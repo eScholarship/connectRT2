@@ -343,6 +343,9 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # Update the metadata on disk
   checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
 
+  # Fail for testing.
+  halt 510, "Intended fail for testing"  #FIXME FOO
+
   # All done.
   content_type "text/plain"
   nil  # content length zero, and HTTP 200 OK
@@ -358,7 +361,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   fileVersion = params['description']  # will be missing if user chose '[None]'
 
   request.body.rewind
-  depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
+  outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
 
   # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
   # TODO - customize raw response
@@ -368,23 +371,20 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
       <expand>parent</expand>
       <expand>policies</expand>
       <expand>all</expand>
-      <name>anvlspec.pdf</name>
+      <name><%=outFilename%></name>
       <type>bitstream</type>
-      <UUID>f4ae2285-f316-48df-b03b-1289a81d3252</UUID>
+      <UUID><%=shortArk%>/<%=outFilename%></UUID>
       <bundleName>ORIGINAL</bundleName>
-      <checkSum checkSumAlgorithm="MD5">94ceff2e200b162a22f3abc32bae106f</checkSum>
-      <description>Accepted version</description>
-      <format>Adobe PDF</format>
-      <mimeType>application/pdf</mimeType>
-      <retrieveLink>/rest/bitstreams/qtmm123456/retrieve</retrieveLink>
+      <description><%=fileVersion%></description>
+      <mimeType><%=mimeType%></mimeType>
+      <retrieveLink>/rest/bitstreams/<%=shortArk%>/<%=outFilename%></retrieveLink>
       <sequenceId>-1</sequenceId>
-      <sizeBytes>61052</sizeBytes>
+      <sizeBytes><%=size%></sizeBytes>
     </bitstream>''', binding)
 end
 
 ###################################################################################################
 get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
-  puts "In bitstream policy get: id=#{itemID} filename=#{filename}"
   content_type "application/atom+xml; type=entry;charset=UTF-8"
   [200, xmlGen('''
     <resourcePolicies>
@@ -397,6 +397,13 @@ get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
         <rpType>TYPE_INHERITED</rpType>
       </resourcepolicy>
     </resourcePolicies>''', binding)]
+end
+
+###################################################################################################
+delete "/dspace-rest/bitstreams/:itemID/:filename/policy/32" do |itemID, filename|
+  # After redepositing a file, Elements goes and deletes the policy from the new file.
+  # Not sure what's going on here. Fake the response for now.
+  [204, "Deleted."]
 end
 
 ###################################################################################################
