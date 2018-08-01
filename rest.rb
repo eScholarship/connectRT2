@@ -31,20 +31,13 @@ def apiQuery(query, vars = {}, privileged = false)
     query = "query(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{query} }"
   end
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
-  headers = { 'Content-TypeX' => 'application/jsonx' }
+  headers = { 'Content-Type' => 'application/json' }
   privileged and headers['Privileged'] = $rt2creds['graphqlApiKey']
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
   response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
   response['data']
-end
-
-###################################################################################################
-# Proxy an OAI query over to the eschol API server, and return its results
-def serveOAI(params)
-  response = HTTParty.get("#{$escholServer}/oai", query: params)
-  [response.code, response.body]
 end
 
 ###################################################################################################
@@ -144,7 +137,7 @@ end
 ###################################################################################################
 get %r{/dspace-rest/(items|handle)/(.*)} do
   #verifyLoggedIn
-  puts "FIXME: check logged in for items"
+  puts "FIXME: verifyLoggedIn: items"
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
   itemFields = %{
@@ -250,6 +243,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
 
   bitstreams = ""
   if data['contentLink'] && data['contentType'] == "application/pdf"
+    bitstreamUUID = data["contentLink"].sub(%r{.*content/},'')
     bitstreams = xmlGen('''
       <bitstreams>
         <link><%= data["contentLink"] %></link>
@@ -258,14 +252,14 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
         <expand>all</expand>
         <name><%= File.basename(data["contentLink"]) %></name>
         <type>bitstream</type>
-        <UUID><%= data["contentLink"] %></UUID>
+        <UUID><%= bitstreamUUID %></UUID>
         <bundleName>ORIGINAL</bundleName>
         <description>Accepted version</description>
         <format>Adobe PDF</format>
         <mimeType>application/pdf</mimeType>
         <link><%= data["contentLink"] %></link>
         <sequenceId>-1</sequenceId>
-        <sizeBytes>61052</sizeBytes>
+        <sizeBytes>999</sizeBytes>
       </bitstreams>''', binding, xml_header: false)
   end
 
@@ -300,8 +294,7 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   # Parse the body as XML, and locate the <entry>
   request.body.rewind
   body = Nokogiri::XML(request.body.read).remove_namespaces!
-  puts "Sword post body: #{body}"
-  puts "env: #{request.env}"
+  puts "Sword post body: #{body.inspect}"
   entry = body.xpath("entry") or raise("can't locate <entry> in request: #{body}")
 
   # Grab the Elements GUID for this publication
@@ -346,7 +339,6 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   request.body.rewind
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
   puts "dspaceMetaPut: body=#{body.to_xml}"
-  puts "end: #{request.env}"
 
   # Update the metadata on disk
   checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
@@ -357,13 +349,22 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
 end
 
 ###################################################################################################
-post "/dspace-rest/items/:itemGUID/bitstreams" do |itemGUID|
+post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   content_type "text/xml"
+
+  shortArk =~ /^qt\w{8}$/ or raise("invalid ARK")
+
+  fileName = params['name'] or raise("missing 'name' param")
+  fileVersion = params['description']  # will be missing if user chose '[None]'
+
+  request.body.rewind
+  depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
+
   # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
   # TODO - customize raw response
   xmlGen('''
     <bitstream>
-      <link>/rest/bitstreams/qtmm123456</link>
+      <link>/rest/bitstreams/<%=shortArk%>/<%=fileName%></link>
       <expand>parent</expand>
       <expand>policies</expand>
       <expand>all</expand>
@@ -382,14 +383,31 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |itemGUID|
 end
 
 ###################################################################################################
+get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
+  puts "In bitstream policy get: id=#{itemID} filename=#{filename}"
+  content_type "application/atom+xml; type=entry;charset=UTF-8"
+  [200, xmlGen('''
+    <resourcePolicies>
+      <resourcepolicy>
+        <action>READ</action>
+        <groupId>8dae5664-cf16-4623-9451-2b094505bca6</groupId>
+        <id>32</id>
+        <resourceId>#{itemID}/#{filename}</resourceId>
+        <resourceType>bitstream</resourceType>
+        <rpType>TYPE_INHERITED</rpType>
+      </resourcepolicy>
+    </resourcePolicies>''', binding)]
+end
+
+###################################################################################################
 post "/dspace-swordv2/edit/:itemGUID" do |itemID|
   # POST /dspace-swordv2/edit/4463d757-868a-42e2-9aab-edc560089ca1
-  request.body.rewind
   # Not sure what we receive here, nor what we should reply. Original log was incomplete
   # because Sword rejected the URL due to misconfiguration.
 
-  # Maybe this is a signal that it's time to publish this thing?
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
+
+  # Maybe this is a signal that it's time to publish this thing?
   approveItem("ark:/13030/#{itemID}", nil, false)
 
   # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
@@ -432,6 +450,11 @@ get "/dspace-oai" do
     else
       params['verb'] == 'ListIdentifiers' and params.delete('from') # Disable differential harvest for now
     end
-    return serveOAI(params)
+
+    # Proxy the OAI query over to the eschol API server, and return its results
+    response = HTTParty.get("#{$escholServer}/oai", query: params,
+                headers: { 'Privileged' => $rt2creds['graphqlApiKey'] })
+    content_type response.headers['Content-Type']
+    return [response.code, response.body]
   end
 end

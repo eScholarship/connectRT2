@@ -251,6 +251,99 @@ def makeEquiv(pubID, ark)
 end
 
 ###################################################################################################
+def depositFile(ark, filename, fileVersion, inStream)
+
+  if !(isModifiableItem(ark))
+    halt 401, "Cannot use Elements to change a non-campus-postprint imported from eSchol"
+  end
+
+  # Get rid of any weird chars in the filename
+  filename = sanitizeFilename(filename)
+
+  # Create a next directory if the item has been published
+  editItem(ark)
+
+  # If user tries to upload something we can't use as a content doc, always treat it as supplemental.
+  forcedSupp = false
+  if fileVersion != 'Supporting information' && !(isPDF(filename) || isWordDoc(filename))
+    fileVersion = 'Supporting information'
+    forcedSupp = true
+  end
+
+  # Save the file data in the appropriate place.
+  if fileVersion == 'Supporting information'
+    uploadedPath = arkToFile(ark, "next/content/supp/#{filename}", true)
+    updType = "supp"
+  else
+    uploadedPath = arkToFile(ark, "next/content/#{filename}", true)
+    updType = "content"
+  end
+  File.open(uploadedPath, "wb") { |io| FileUtils.copy_stream(inStream, io) }
+
+  # If the file looks like a PDF, make sure the Unix 'file' command agrees.
+  uploadedMimeType = SubiGuts.guessMimeType(uploadedPath)
+  if uploadedMimeType =~ /pdf/
+    if !(checkOutput(['/usr/bin/file', '--brief', uploadedPath]) =~ /PDF/i)
+      raise("Non-PDF uploaded as PDF")
+    end
+  end
+
+  # Insert UCI metadata for the uploaded file
+  editXML(arkToFile(ark, "next/meta/base.meta.xml")) do |meta|
+    partialUploadedPath = uploadedPath.sub(%r{.*/content/}, 'content/')
+    contentEl = meta.find! 'content', before:'context'
+
+    # Content file processing
+    if updType == 'content'
+      pdfPath = convertToPDF(ark, uploadedPath)  # TODO: If this fails, email eschol staff
+
+      pdfPath and generatePreviewData(ark, pdfPath)
+      partialPdfPath = pdfPath.sub(%r{.*/content/}, 'content/')
+      # Remove existing file and its element - we will replace them
+      contentEl.xpath('file/native/file[@path]') do |nfEl|
+        if nfEl[:path] != partialUploadedPath
+          nfPath = arkToFile(ark, nfEl[:path])
+          puts "Deleting old native file '#{nfPath}'"
+          File.delete nfPath if File.exist? nfPath
+        end
+      end
+      contentEl.xpath('file').remove
+      # Make a new 'native' file element
+      contentEl.build { |xml|
+        xml.file(path:partialPdfPath) {
+          xml.mimeType SubiGuts.guessMimeType(pdfPath)
+          xml.fileSize SubiGuts.getHumanSize(pdfPath)
+          xml.native(path:partialUploadedPath) {
+            xml.mimeType uploadedMimeType
+            xml.fileSize SubiGuts.getHumanSize(uploadedPath)
+            xml.originalName File.basename(uploadedPath)
+          }
+        }
+      }
+    elsif updType == 'supp'
+      # Supplemental file processing (for now we also treat non-PDF content files as supp)
+      suppEl = contentEl.find! 'supplemental'
+      # Remove existing file element of the same path (if any) - we will replace it
+      suppEl.xpath("file[@path='#{partialUploadedPath}']").remove
+      # Make a new file element
+      suppEl.build { |xml|
+        xml.file(path:partialUploadedPath) {
+          xml.mimeType uploadedMimeType
+          xml.fileSize SubiGuts.getHumanSize(uploadedPath)
+        }
+      }
+    end
+  end
+
+  # If we had to force a content file into supp, note it as an item fault.
+  if forcedSupp
+    recordFault(ark, false, 'no_document',
+                "User '#{who}' uploaded non-doc file '#{filename}' as document for Elements pub #{pubID} (#{ark}). " +
+                "Treated as a supp file. We need to review this item.")
+  end
+end
+
+###################################################################################################
 # We receive this post when the user uploads a file to Elements. It may or may
 # not be the first time we see this publication.
 # OLD OLD OLD
@@ -1308,6 +1401,9 @@ def transformPeople(uci, metaHash, authOrEd)
             }
           end
           person = nil
+        when 'address'
+          # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
+          # do nothing with it for now
         else
           raise("Unexpected person field #{field.inspect}")
       end
