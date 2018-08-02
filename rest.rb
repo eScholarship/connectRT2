@@ -343,9 +343,6 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # Update the metadata on disk
   checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
 
-  # Fail for testing.
-  halt 510, "Intended fail for testing"  #FIXME FOO
-
   # All done.
   content_type "text/plain"
   nil  # content length zero, and HTTP 200 OK
