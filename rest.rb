@@ -10,6 +10,9 @@ $rt2creds = JSON.parse(File.read("#{$homeDir}/.passwords/rt2_adapter_creds.json"
 $sessions = {}
 MAX_SESSIONS = 5
 
+$userErrors = {}
+MAX_USER_ERRORS = 20
+
 ###################################################################################################
 # Nice way to generate XML, just using ERB-like templates instead of Builder's weird syntax.
 def xmlGen(templateStr, bnding, xml_header: true)
@@ -340,6 +343,18 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
   puts "dspaceMetaPut: body=#{body.to_xml}"
 
+  # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
+  # we created in the earlier sword post.
+  pubID = body.xpath(".//metadataentry").map { |ent|
+    ent.text_at("key") == "elements-pub-id" ? ent.text_at("value") : nil
+  }.compact[0] or raise("Can't find publication ID in feed")
+  puts "Found pubID #{pubID.inspect}."
+  $arkDb.execute("UPDATE arks SET external_id=?, source=?, external_url=? WHERE id=?",
+    [pubID, 'elements', nil, "ark:13030/#{itemID}"])  # note missing slash - a very old error we still have to propagate
+
+  # Test out the user error mechanism
+  userErrorHalt(itemID, "We think you made a mistake.")
+
   # Update the metadata on disk
   checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
 
@@ -461,4 +476,24 @@ get "/dspace-oai" do
     content_type response.headers['Content-Type']
     return [response.code, response.body]
   end
+end
+
+###################################################################################################
+def userErrorHalt(ark, msg)
+  shortArk = ark[/qt\w{8}/]
+  $userErrors.size >= MAX_USER_ERRORS and $userErrors.shift
+  $userErrors[shortArk] = { time: Time.now, msg: msg }
+  halt 400, msg
+end
+
+###################################################################################################
+get "/dspace-userErrorMsg/:pubID" do |pubID|
+  # CORS support
+  origin = request.env['HTTP_ORIGIN']
+  origin =~ /oapolicy.universityofcalifornia.edu/ and headers 'Access-Control-Allow-Origin' => origin
+
+  # Find the ARK corresponding to this pub
+  ark = $arkDb.get_first_value("SELECT id FROM arks WHERE source='elements' AND external_id=?", pubID)
+  puts "Found ark #{ark.inspect} for pub #{pubID}."
+  $userErrors[ark] or halt 404, "Unknown pub"
 end
