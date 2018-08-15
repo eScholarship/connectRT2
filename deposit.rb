@@ -59,11 +59,40 @@ def sanitizeFilename(fn)
 end
 
 ###################################################################################################
-# Convert an elements publication ID to an ARK on our system. This will create
-# a new ark if we haven't seen the publication before.
-def mintArk(pubID)
-  ark = `#{$controlDir}/tools/mintArk.py elements #{pubID}`.strip()
+# Create a new ARK on our system.
+def mintArk(elementsGUID)
+  ark = `#{$controlDir}/tools/mintArk.py elements #{elementsGUID} incomplete`.strip()
   return (ark =~ %r<^ark:/?13030/\w{10}$>) ? ark : raise("bad result '#{ark}' from mintArk")
+end
+
+###################################################################################################
+# All kinds of circumstances can cause an item to be incomplete during the many stages of
+# depositing from Elements. We need to clean up after.
+def destroyOnFail(ark, &blk)
+  # What's all this business with "unfinished" and "ensure" below? Why not just use begin/rescue?
+  # It's because Sinatra's "halt" (which is super handy) doesn't actually use exceptions; instead
+  # it uses throw/catch which is a completely separate mechanism in Ruby from raise/rescue.
+  # Who knew. Kinda an ugly corner of the language.
+  result = "unfinished"
+  begin
+    result = yield blk
+    return result
+  ensure
+    if result == "unfinished"
+      # It shouldn't have been published up to this point, but if it was, don't destroy it.
+      marker = $arkDb.get_first_value("SELECT external_url FROM arks WHERE id=?", normalizeArk(ark))
+      marker or raise("Strange, ARK should be in db: #{ark}")
+      if marker == "incomplete"
+        # Not yet published - destroy it.
+        puts "Unable to complete processing item #{ark.inspect} - destroying partial item."
+        begin
+          `#{$controlDir}/tools/unharvestItem.py #{getShortArk(ark)}`
+        rescue => e
+          puts "Secondary failure during unharvest: #{e}"
+        end
+      end
+    end
+  end
 end
 
 ###################################################################################################
@@ -254,8 +283,11 @@ end
 def depositFile(ark, filename, fileVersion, inStream)
 
   if !(isModifiableItem(ark))
-    halt 401, "Cannot use Elements to change a non-campus-postprint imported from eSchol"
+    userErrorHalt("Cannot use Elements to change a non-campus-postprint imported from eSchol")
   end
+
+  # User must select a version
+  fileVersion or userErrorHalt(ark, "You must choose a 'File version'.")
 
   # Get rid of any weird chars in the filename
   filename = sanitizeFilename(filename)
@@ -264,10 +296,8 @@ def depositFile(ark, filename, fileVersion, inStream)
   editItem(ark)
 
   # If user tries to upload something we can't use as a content doc, always treat it as supplemental.
-  forcedSupp = false
   if fileVersion != 'Supporting information' && !(isPDF(filename) || isWordDoc(filename))
-    fileVersion = 'Supporting information'
-    forcedSupp = true
+    userErrorHalt(ark, "Main content document must be PDF or Word format.")
   end
 
   # Save the file data in the appropriate place.
@@ -284,7 +314,7 @@ def depositFile(ark, filename, fileVersion, inStream)
   uploadedMimeType = SubiGuts.guessMimeType(uploadedPath)
   if uploadedMimeType =~ /pdf/
     if !(checkOutput(['/usr/bin/file', '--brief', uploadedPath]) =~ /PDF/i)
-      raise("Non-PDF uploaded as PDF")
+      userErrorHalt(ark, "Invalid PDF file.")
     end
   end
 
@@ -305,7 +335,6 @@ def depositFile(ark, filename, fileVersion, inStream)
       contentEl.xpath('file/native/file[@path]') do |nfEl|
         if nfEl[:path] != partialUploadedPath
           nfPath = arkToFile(ark, nfEl[:path])
-          puts "Deleting old native file '#{nfPath}'"
           File.delete nfPath if File.exist? nfPath
         end
       end
@@ -335,13 +364,6 @@ def depositFile(ark, filename, fileVersion, inStream)
         }
       }
     end
-  end
-
-  # If we had to force a content file into supp, note it as an item fault.
-  if forcedSupp
-    recordFault(ark, false, 'no_document',
-                "User uploaded non-doc file '#{filename}' as document for #{ark}. " +
-                "Treated as a supp file. We need to review this item.")
   end
 
   return filename, outSize, outMimeType
@@ -526,6 +548,7 @@ post '/binary' do
     end
 
     # If a license has been granted, publish the item.
+    raise "OLD OLD OLD"
     approveItem(ark, who, true) if isGranted(ark)
 
     # All done. Return 201 per sword spec.
@@ -670,6 +693,7 @@ def respondToFileDelete(shortArk, dir, filename, editAndApprove)
 
     # Now remove the file itself.
     File.delete path
+    raise "OLD OLD OLD"
     approveItem(ark) if editAndApprove and isGranted(ark)
 
     # Note: the Sword spec says we should respond with a 204, but Elements
@@ -1142,16 +1166,21 @@ def sendNewApprovalEmail(ark, depositorEmail)
 end
 
 ###################################################################################################
-def approveItem(ark, who=nil, okToEmail=true)
+def approveItem(ark, pubID, who=nil, okToEmail=true)
 
   # Before starting, determine if this is a new item.
   path = arkToFile(ark, 'meta/base.meta.xml', true)
   isNew = !(File.exist? path)
 
+  # Take over ownership of a wacky Elements GUID item, replacing it with Elements pub ID. Changes
+  # the arks database so that future scans will correctly scan this item.
+  $arkDb.execute("UPDATE arks SET external_id=?, source=?, external_url=? WHERE id=?",
+    [pubID, 'elements', nil, ark.sub("ark:/", "ark:")])
+
   # Most of this is rote
   SubiGuts.approveItem(ark, "Submission completed at oapolicy.universityofcalifornia.edu", who)
 
-  # Jam the data into the database, so that immediate API calls will pick it up.
+  # Jam the data into the eschol5 database, so that immediate API calls will pick it up.
   Bundler.with_clean_env {  # super annoying that bundler by default overrides sub-bundlers environments
     checkCall(["#{$jscholDir}/tools/convert.rb", "--preindex", ark.sub("ark:/13030/", "")])
   }
@@ -1161,10 +1190,7 @@ def approveItem(ark, who=nil, okToEmail=true)
 end
 
 ###################################################################################################
-def isGranted(ark)
-
-  # For items from Elements, there will be a license file.
-  findLicensePath(arkToFile(ark, 'next/meta/license')) and return true
+def isPublished(ark)
 
   # For eschol items, check the 'state' attribute in the main metadata
   metaPath = arkToFile(ark, "meta/base.meta.xml")
@@ -1178,17 +1204,15 @@ end
 
 ###################################################################################################
 # Create a 'next' directory for an item, and make it pending there.
+def ownArk(ark, pubID)
+end
+
+###################################################################################################
+# Create a 'next' directory for an item, and make it pending there.
 def editItem(ark, who=nil, pubID=nil)
 
   # Skip if the item has never been published.
   return unless File.directory? arkToFile(ark, 'meta')
-
-  # We may be taking ownership of a Subi item, replacing it with Elements. Change
-  # the arks databse so that future scans will correctly scan this item.
-  if pubID
-    $arkDb.execute("UPDATE arks SET external_id=?, source=?, external_url=? WHERE id=?",
-      [pubID, 'elements', nil, ark.sub("ark:/", "ark:")])
-  end
 
   # The rest is rote
   SubiGuts.editItem(ark, "Changed on oapolicy.universityofcalifornia.edu", who)
@@ -1534,9 +1558,13 @@ def uciFromFeed(uci, feed, **opt)
   history[:origin] = 'oa_harvester'
   history.at("escholPublicationDate") or history.find!('escholPublicationDate').content = Date.today.iso8601
   history.at("submissionDate") or history.find!('submissionDate').content = Date.today.iso8601
-  pubData = metaHash.delete('publication-date') or raise("metadata missing 'date.issued'")
-  pubData =~ /^20\d\d-[01]\d-[0123]\d$/ or raise("Unrecognized date.issued format: #{pubData.inspect}")
-  history.find!('originalPublicationDate').content = pubData
+  pubDate = metaHash.delete('publication-date') or raise("metadata missing 'date.issued'")
+  history.find!('originalPublicationDate').content = case pubDate
+    when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
+    when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
+    when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
+    else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
+  end
   if !history.at("stateChange")
     history.build { |xml|
       xml.stateChange(:state => 'new',
@@ -1760,6 +1788,7 @@ def applyMergeUpdates(fromPubID, fromArk, toPubID, toArk, feedMeta, who)
     end
 
     # If a license has been granted, publish the item.
+    puts "OLD OLD OLD"
     approveItem(fromArk, who) if isGranted(fromArk)
   end
 
