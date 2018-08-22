@@ -7,6 +7,8 @@ require 'xmlsimple'
 
 $rt2creds = JSON.parse(File.read("#{$homeDir}/.passwords/rt2_adapter_creds.json"))
 
+$jscholKey = ENV['JSCHOL_KEY'] or raise("missing env JSCHOL_KEY")
+
 $sessions = {}
 MAX_SESSIONS = 5
 
@@ -141,6 +143,18 @@ def stripHTML(encoded)
 end
 
 ###################################################################################################
+def calcContentReadKey(itemID, contentPath)
+  key = Digest::SHA1.hexdigest($jscholKey + "|read|" + contentPath).to_i(16).to_s(36)
+end
+
+###################################################################################################
+def filePreviewLink(itemID, contentPath)
+  server = "https://#{request.host}"
+  key = calcContentReadKey(itemID, contentPath)
+  return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+end
+
+###################################################################################################
 get %r{/dspace-rest/(items|handle)/(.*)} do
   verifyLoggedIn
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
@@ -192,6 +206,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     bookTitle
     contentLink
     contentType
+    contentSize
     disciplines
     embargoExpires
     externalLinks
@@ -217,58 +232,86 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     type
     ucpmsPubType
     updated
+    nativeFileName
+    nativeFileSize
+    suppFiles {
+      file
+      size
+      contentType
+    }
   }
   data = apiQuery("item(id: $itemID) { #{itemFields} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
-  data.delete_if{ |k,v| v.nil? || v.empty? }
+  data.delete_if{ |k,v| v.nil? || (v.respond_to?(:empty) && v.empty?) }
 
-  metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+  if params['expand'] =~ /metadata/
+    metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+  else
+    metaXML = ""
+  end
   lastMod = Time.parse(data.dig("updated")).strftime("%Y-%m-%d %H:%M:%S")
 
-  collections = (data['units'] || []).map { |unit|
-    xmlGen('''
-      <parentCollection>
-        <link>/rest/collections/13030/<%= unit["id"] %></link>
-        <expand>parentCommunityList</expand>
-        <expand>parentCommunity</expand>
-        <expand>items</expand>
-        <expand>license</expand>
-        <expand>logo</expand>
-        <expand>all</expand>
-        <handle>13030/<%= unit["id"] %></handle>
-        <name><%= unit.dig("parents", 0, "name") + ": " + unit["name"] %></name>
-        <type>collection</type>
-        <UUID><%= unit["id"] %></UUID>
-        <copyrightText/>
-        <introductoryText/>
-        <numberItems><%= unit.dig("items", "total") %></numberItems>
-        <shortDescription><%= unit["id"] %></shortDescription>
-        <sidebarText/>
-      </parentCollection>''', binding, xml_header: false)
-  }.join("\n")
+  if params['expand'] =~ /parentCollection/
+    collections = (data['units'] || []).map { |unit|
+      xmlGen('''
+        <parentCollection>
+          <link>/rest/collections/13030/<%= unit["id"] %></link>
+          <expand>parentCommunityList</expand>
+          <expand>parentCommunity</expand>
+          <expand>items</expand>
+          <expand>license</expand>
+          <expand>logo</expand>
+          <expand>all</expand>
+          <handle>13030/<%= unit["id"] %></handle>
+          <name><%= unit.dig("parents", 0, "name") + ": " + unit["name"] %></name>
+          <type>collection</type>
+          <UUID><%= unit["id"] %></UUID>
+          <copyrightText/>
+          <introductoryText/>
+          <numberItems><%= unit.dig("items", "total") %></numberItems>
+          <shortDescription><%= unit["id"] %></shortDescription>
+          <sidebarText/>
+        </parentCollection>''', binding, xml_header: false)
+    }.join("\n")
+  else
+    collections = ""
+  end
 
-  bitstreams = ""
-  if data['contentLink'] && data['contentType'] == "application/pdf"
-    bitstreamUUID = data["contentLink"].sub(%r{.*content/},'')
-    # Yes, it's wierd, but DSpace generates one <bitstreams> (plural) element for each bitstream.
-    # Maybe somebody would have noticed this if they bothered documenting their API.
-    bitstreams = xmlGen('''
-      <bitstreams>
-        <link><%= data["contentLink"] %></link>
-        <expand>parent</expand>
-        <expand>policies</expand>
-        <expand>all</expand>
-        <name><%= File.basename(data["contentLink"]) %></name>
-        <type>bitstream</type>
-        <UUID><%= bitstreamUUID %></UUID>
-        <bundleName>ORIGINAL</bundleName>
-        <description>Accepted version</description>
-        <format>Adobe PDF</format>
-        <mimeType>application/pdf</mimeType>
-        <retrieveLink><%= data["contentLink"] %></retrieveLink>
-        <sequenceId>-1</sequenceId>
-        <sizeBytes>999</sizeBytes>
-      </bitstreams>''', binding, xml_header: false)
-    puts "Returning bitstreams: #{bitstreams}"
+  if params['expand'] =~ /bitstreams/
+    arr = []
+    if data['contentLink'] && data['contentType'] == "application/pdf"
+      if data['nativeFileName']
+        arr << { id: "#{itemID}/content/#{data['nativeFileName']}",
+                 name: data['nativeFileName'], size: data['nativeFileSize'],
+                 link: filePreviewLink(itemID, "content/#{data['nativeFileName']}"),
+                 type: data['contentType'] }
+      else
+        arr << { id: "#{itemID}/content/#{itemID}.pdf",
+                 name: "#{itemID}.pdf", size: data['contentSize'],
+                 link: filePreviewLink(itemID, "content/#{itemID}.pdf"),
+                 type: data['contentType'] }
+      end
+    end
+    bitstreams = arr.map.with_index { |info, idx|
+      # Yes, it's wierd, but DSpace generates one <bitstreams> (plural) element for each bitstream.
+      # Maybe somebody would have noticed this if they had bothered documenting their API.
+      xmlGen('''
+        <bitstreams>
+          <link><%= info[:link] %></link>
+          <expand>parent</expand>
+          <expand>policies</expand>
+          <expand>all</expand>
+          <name><%= info[:name] %></name>
+          <type>bitstream</type>
+          <UUID><%= info[:id] %></UUID>
+          <bundleName>ORIGINAL</bundleName>
+          <description>File</description>
+          <format>File</format>
+          <mimeType><%= info[:type] %></mimeType>
+          <retrieveLink><%= info[:link] %></retrieveLink>
+          <sequenceId>-1</sequenceId>
+          <sizeBytes><%= info[:size] %></sizeBytes>
+        </bitstreams>''', binding, xml_header: false)
+    }.join("\n")
   end
 
   content_type "text/xml"
@@ -428,7 +471,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
 end
 
 ###################################################################################################
-get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
+get %r{/dspace-rest/bitstreams/(.+)/policy} do |path|
   content_type "application/atom+xml; type=entry;charset=UTF-8"
   [200, xmlGen('''
     <resourcePolicies>
@@ -436,7 +479,7 @@ get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
         <action>READ</action>
         <groupId>0</groupId>
         <id>32</id>
-        <resourceId>#{itemID}/#{filename}</resourceId>
+        <resourceId><%= path %>/</resourceId>
         <resourceType>bitstream</resourceType>
         <rpType>TYPE_INHERITED</rpType>
       </resourcepolicy>
@@ -446,7 +489,19 @@ end
 ###################################################################################################
 delete "/dspace-rest/bitstreams/:itemID/:filename/policy/32" do |itemID, filename|
   # After redepositing a file, Elements goes and deletes the policy from the new file.
-  # Not sure what's going on here. Fake the response for now.
+  # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
+  # the item.
+
+  if isPublished(itemID) && isPending(itemID)
+    info = $recentArkInfo[itemID]
+    if info
+      approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
+    else
+      approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
+    end
+  end
+
+  # Return a fake response.
   [204, "Deleted."]
 end
 
@@ -466,7 +521,7 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
     request.body.read.strip == "" or errHalt(400, "don't know what to do with actual edit data")
 
     # Time to publish this thing.
-    info = $recentArkInfo[itemID] or errHalt(400, "ark isn't recent?")
+    info = $recentArkInfo[itemID]
     if info
       approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
     else
@@ -557,4 +612,14 @@ get "/dspace-userErrorMsg/:pubID" do |pubID|
 
   # Huh. Oh well, maybe it wasn't a user error but an internal error instead.
   errHalt(404, "Unknown pub")
+end
+
+###################################################################################################
+get %r{/dspace-preview/(.*)} do |path|
+  path =~ %r{^(qt\w{8})/(content/.*)} or halt(400)
+  itemID, contentPath = $1, $2
+  contentPath.include?('..') and halt(400)
+  calcContentReadKey(itemID, contentPath) == params['key'] or halt(403)
+  fullPath = arkToFile(itemID, contentPath)
+  send_file(fullPath)
 end

@@ -457,6 +457,12 @@ def isPublished(ark)
 end
 
 ###################################################################################################
+def isPending(ark)
+  # See if there's a next directory
+  return File.exists?(arkToFile(ark, "next"))
+end
+
+###################################################################################################
 # Create a 'next' directory for an item, and make it pending there.
 def editItem(ark, who=nil, pubID=nil)
 
