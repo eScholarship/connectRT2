@@ -291,6 +291,12 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
                  type: data['contentType'] }
       end
     end
+    (data['suppFiles'] || []).each { |supp|
+        arr << { id: "#{itemID}/content/supp/#{supp['file']}",
+                 name: supp['file'], size: supp['size'],
+                 link: filePreviewLink(itemID, "content/supp/#{supp['file']}"),
+                 type: supp['contentType'] }
+    }
     bitstreams = arr.map.with_index { |info, idx|
       # Yes, it's wierd, but DSpace generates one <bitstreams> (plural) element for each bitstream.
       # Maybe somebody would have noticed this if they had bothered documenting their API.
@@ -308,7 +314,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
           <format>File</format>
           <mimeType><%= info[:type] %></mimeType>
           <retrieveLink><%= info[:link] %></retrieveLink>
-          <sequenceId>-1</sequenceId>
+          <sequenceId><%= idx+1 %></sequenceId>
           <sizeBytes><%= info[:size] %></sizeBytes>
         </bitstreams>''', binding, xml_header: false)
     }.join("\n")

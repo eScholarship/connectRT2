@@ -474,13 +474,45 @@ def editItem(ark, who=nil, pubID=nil)
 end
 
 ###################################################################################################
-# Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
-# data in, it will be retained if Elements doesn't override it.
-# NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
-# Options: ark, fileVersion
-def uciFromFeed(uci, feed, **opt)
+def convertPubType(pubTypeStr)
+  case pubTypeStr
+    when %r{^(journal-article|conference|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'paper'
+    when %r{^(dataset|poster|media|presentation|other)$}; 'non-textual'
+    when "book"; 'monograph'
+    when "chapter"; 'chapter'
+    else raise "Can't recognize pubType #{pubTypeStr.inspect}" # Happens when Elements changes or adds types
+  end
+end
 
-  # Parse out the flat list of metadata from the feed
+###################################################################################################
+def convertKeywords(kws, uci)
+  uci.find!('keywords').rebuild { |xml|
+    # Transform "1505 Marketing (for)" to just "Marketing"
+    kws.map { |kw|
+      # Remove scheme at end, and remove initial series of digits
+      kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
+    }.uniq.each { |kw|
+      xml.keyword kw
+    }
+  }
+end
+
+###################################################################################################
+def convertRights(licName)
+  case licName
+    when 'CC BY';       'cc1'
+    when 'CC BY-SA';    'cc2'
+    when 'CC BY-ND';    'cc3'
+    when 'CC BY-NC';    'cc4'
+    when 'CC BY-NC-SA'; 'cc5'
+    when 'CC BY-NC-ND'; 'cc6'
+    when nil;           'public'
+    else; userErrorHalt("Unrecognized reuse license #{licName.inspect}")
+  end
+end
+
+###################################################################################################
+def parseMetadataEntries(feed)
   metaHash = {}
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
@@ -493,45 +525,66 @@ def uciFromFeed(uci, feed, **opt)
       metaHash[key] = value
     end
   }
+  return metaHash
+end
 
-  # The easy top-level attributes
-  if opt[:ark]
-    uci[:id] = uci[:id] || opt[:ark].sub(%r{ark:/?13030/}, '')
+###################################################################################################
+def convertPubDate(pubDate)
+  case pubDate
+    when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
+    when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
+    when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
+    else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
   end
-  ark = uci[:id]
+end
+
+###################################################################################################
+def convertExtent(metaHash, uci)
+  uci.find!('extent').rebuild { |xml|
+    metaHash.key?('fpage') and xml.fpage(metaHash.delete('fpage'))
+    metaHash.key?('lpage') and xml.lpage(metaHash.delete('lpage'))
+  }
+end
+
+###################################################################################################
+def addDepositStateChange(history, who)
+  if !history.at("stateChange")
+    history.build { |xml|
+      xml.stateChange(:state => 'new', :date  => DateTime.now.iso8601, :who   => who) {
+        xml.comment_ "Deposited at oapolicy.universityofcalifornia.edu"
+      }
+    }
+  end
+end
+
+###################################################################################################
+def convertFileVersion(fileVersion)
+  case fileVersion
+    when /(Author final|Submitted) version/; 'authorVersion'
+    when "Published version"; 'publisherVersion'
+    else raise "Unrecognized file version '#{opt[:fileVersion]}'"
+  end
+end
+
+###################################################################################################
+# Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
+# data in, it will be retained if Elements doesn't override it.
+# NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
+def uciFromFeed(uci, feed, ark, fileVersion = nil)
+
+  # Parse out the flat list of metadata from the feed into a handy hash
+  metaHash = parseMetadataEntries(feed)
+
+  # Top-level attributes
+  uci[:id] = ark.sub(%r{ark:/?13030/}, '')
   uci[:dateStamp] = DateTime.now.iso8601
   uci[:peerReview] = uci[:peerReview] || 'yes'
   uci[:state] = uci[:state] || 'new'
   uci[:stateDate] = uci[:stateDate] || DateTime.now.iso8601
+  uci[:type] = convertPubType(metaHash.delete('object.type') || raise("missing object.type"))
+  (fileVersion && fileVersion != 'Supporting information') and uci[:externalPubVersion] = convertFileVersion(fileVersion)
 
-  # Figure out the publication ID
-  pubID = metaHash.delete('elements-pub-id') or raise("can't find pub ID in feed")
-
-  # Publication type is a bit tricky
-  pubTypeStr = metaHash.delete('object.type') or raise("metadata missing object.type")
-  uci[:type] = case pubTypeStr
-    when %r{^(journal-article|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'paper'
-    when %r{^(dataset|poster|media|presentation|other)$}; 'non-textual'
-    when "book"; 'monograph'
-    when "chapter"; 'chapter'
-    else raise "Can't recognize pubType #{pubTypeStr.inspect}" # Happens when Elements changes or adds types
-  end
-
-  # Creative Commons license data
-  licName = metaHash['requested-reuse-licence.short-name'] || "public"
-  rightsEl = uci.find! 'rights'
-  rightsEl.content = case licName
-    when 'CC BY';       'cc1'
-    when 'CC BY-SA';    'cc2'
-    when 'CC BY-ND';    'cc3'
-    when 'CC BY-NC';    'cc4'
-    when 'CC BY-NC-SA'; 'cc5'
-    when 'CC BY-NC-ND'; 'cc6'
-    when 'public';      'public'
-    else; userErrorHalt("Unrecognized reuse license #{licName.inspect}")
-  end
-
-  # Author and editor metadata. Use the preferred record if specified.
+  # Author and editor metadata.
   transformPeople(uci, metaHash, 'author')
   transformPeople(uci, metaHash, 'editor')
 
@@ -540,31 +593,15 @@ def uciFromFeed(uci, feed, **opt)
   metaHash.key?('title') and uci.find!('title').content = metaHash.delete('title')
   metaHash.key?('abstract') and uci.find!('abstract').content = metaHash.delete('abstract')
   metaHash.key?('doi') and uci.find!('doi').content = metaHash.delete('doi')
-  if metaHash.key?('fpage') || metaHash.key?('lpage')
-    uci.find!('extent').rebuild { |xml|
-      metaHash.key?('fpage') and xml.fpage(metaHash.delete('fpage'))
-      metaHash.key?('lpage') and xml.lpage(metaHash.delete('lpage'))
-    }
-  end
-  if metaHash.key?('keywords')
-    uci.find!('keywords').rebuild { |xml|
-      # Transform "1505 Marketing (for)" to just "Marketing"
-      metaHash.delete('keywords').map { |kw|
-        # Remove scheme at end and initial series of digits
-        kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
-      }.uniq.each { |kw|
-        xml.keyword kw
-      }
-    }
-  end
+  (metaHash.key?('fpage') || metaHash.key?('lpage')) and convertExtent(metaHash, uci)
+  metaHash.key?('keywords') and convertKeywords(metaHash.delete('keywords'), uci)
+  uci.find!('rights').content = convertRights(metaHash.delete('requested-reuse-licence.short-name'))
 
   # Things that go inside <context>
   contextEl = uci.find! 'context'
   oldEntities = contextEl.xpath(".//entity").dup    # record old entities so we can reconstruct and add to them
   contextEl.rebuild { |xml|
-      xml.localID(:type => 'oa_harvester') {
-        xml.text pubID
-      }
+      xml.localID(:type => 'oa_harvester') { xml.text(metaHash.delete('elements-pub-id') || raise("missing pub-id")) }
       metaHash.key?("issn") and xml.issn(metaHash.delete("issn"))
       metaHash.key?("isbn-13") and xml.isbn(metaHash.delete("isbn-13")) # for books and chapters
       metaHash.key?("journal") and xml.journal(metaHash.delete("journal"))
@@ -576,27 +613,12 @@ def uciFromFeed(uci, feed, **opt)
   }
 
   # Things that go inside <history>
-  who = metaHash.delete('depositor-email') or raise("metadata missing depositor-email")
   history = uci.find! 'history'
   history[:origin] = 'oa_harvester'
   history.at("escholPublicationDate") or history.find!('escholPublicationDate').content = Date.today.iso8601
   history.at("submissionDate") or history.find!('submissionDate').content = Date.today.iso8601
-  pubDate = metaHash.delete('publication-date') or raise("metadata missing 'date.issued'")
-  history.find!('originalPublicationDate').content = case pubDate
-    when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
-    when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
-    when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
-    else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
-  end
-  if !history.at("stateChange")
-    history.build { |xml|
-      xml.stateChange(:state => 'new',
-                      :date  => DateTime.now.iso8601,
-                      :who   => who) {
-        xml.comment_ "Deposited at oapolicy.universityofcalifornia.edu"
-      }
-    }
-  end
+  history.find!('originalPublicationDate').content = convertPubDate(metaHash.delete('publication-date'))
+  addDepositStateChange(history, metaHash.delete('depositor-email') || raise("metadata missing depositor-email"))
 end
 
 ###################################################################################################
@@ -647,7 +669,7 @@ def isMetaChanged(ark, feedData)
   # Keep a backup of the old data, then integrate the feed into new metadata
   uciOld = uci.dup
   begin
-    uciFromFeed(uci.root, feedData, :ark => ark)
+    uciFromFeed(uci.root, feedData, ark)
   rescue Exception => e
     puts "Warning: unable to parse feed: #{e}"
     puts e.backtrace
@@ -686,7 +708,7 @@ def updateMetadata(ark, fileVersion=nil)
   uci = File.file?(metaPathCur) ? fileToXML(metaPathCur) :
         Nokogiri::XML("<uci:record xmlns:uci='http://www.cdlib.org/ucingest'/>")
 
-  uciFromFeed(uci.root, feed.root, :ark => ark, :fileVersion => fileVersion)
+  uciFromFeed(uci.root, feed.root, ark, fileVersion)
   File.open(metaPathTmp, 'w') { |io| uci.write_xml_to(io, indent:3) }
 
   # For info, run Jing validation on the result, but don't check the return code.
