@@ -48,11 +48,10 @@
           <xwalk:field-source data-part="group:name" suffix="|" />
         </xwalk:field-source>
       </xwalk:field-mapping>
-      <xwalk:field-mapping to="funder-details">
+      <xwalk:field-mapping to="funder-name" separator="|">
         <xwalk:field-source from="object.relationships" value-map="grant-relationships">
           <xwalk:field-source data-part="relationship:other-object">
-            <xwalk:field-source subfield="name" from="funder-name" />
-            <xwalk:field-source subfield="reference" from="funder-reference" />
+            <xwalk:field-source from="api:object/api:view/api:field[@name='funder-name']" select-using="xpath"/>
           </xwalk:field-source>
         </xwalk:field-source>
       </xwalk:field-mapping>
