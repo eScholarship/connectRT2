@@ -7,11 +7,16 @@ require 'xmlsimple'
 
 $rt2creds = JSON.parse(File.read("#{$homeDir}/.passwords/rt2_adapter_creds.json"))
 
+$jscholKey = ENV['JSCHOL_KEY'] or raise("missing env JSCHOL_KEY")
+
 $sessions = {}
 MAX_SESSIONS = 5
 
 $userErrors = {}
-MAX_USER_ERRORS = 20
+MAX_USER_ERRORS = 40
+
+$recentArkInfo = {}
+MAX_RECENT_ARK_INFO = 20
 
 ###################################################################################################
 # Nice way to generate XML, just using ERB-like templates instead of Builder's weird syntax.
@@ -138,9 +143,20 @@ def stripHTML(encoded)
 end
 
 ###################################################################################################
+def calcContentReadKey(itemID, contentPath)
+  key = Digest::SHA1.hexdigest($jscholKey + "|read|" + contentPath).to_i(16).to_s(36)
+end
+
+###################################################################################################
+def filePreviewLink(itemID, contentPath)
+  server = "https://#{request.host}"
+  key = calcContentReadKey(itemID, contentPath)
+  return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+end
+
+###################################################################################################
 get %r{/dspace-rest/(items|handle)/(.*)} do
-  #verifyLoggedIn
-  puts "FIXME: verifyLoggedIn: items"
+  verifyLoggedIn
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
   itemFields = %{
@@ -190,6 +206,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     bookTitle
     contentLink
     contentType
+    contentSize
     disciplines
     embargoExpires
     externalLinks
@@ -215,55 +232,92 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     type
     ucpmsPubType
     updated
+    nativeFileName
+    nativeFileSize
+    suppFiles {
+      file
+      size
+      contentType
+    }
   }
   data = apiQuery("item(id: $itemID) { #{itemFields} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
-  data.delete_if{ |k,v| v.nil? || v.empty? }
+  data.delete_if{ |k,v| v.nil? || (v.respond_to?(:empty) && v.empty?) }
 
-  metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+  if params['expand'] =~ /metadata/
+    metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+  else
+    metaXML = ""
+  end
   lastMod = Time.parse(data.dig("updated")).strftime("%Y-%m-%d %H:%M:%S")
 
-  collections = (data['units'] || []).map { |unit|
-    xmlGen('''
-      <parentCollection>
-        <link>/rest/collections/13030/<%= unit["id"] %></link>
-        <expand>parentCommunityList</expand>
-        <expand>parentCommunity</expand>
-        <expand>items</expand>
-        <expand>license</expand>
-        <expand>logo</expand>
-        <expand>all</expand>
-        <handle>13030/<%= unit["id"] %></handle>
-        <name><%= unit.dig("parents", 0, "name") + ": " + unit["name"] %></name>
-        <type>collection</type>
-        <UUID><%= unit["id"] %></UUID>
-        <copyrightText/>
-        <introductoryText/>
-        <numberItems><%= unit.dig("items", "total") %></numberItems>
-        <shortDescription><%= unit["id"] %></shortDescription>
-        <sidebarText/>
-      </parentCollection>''', binding, xml_header: false)
-  }.join("\n")
+  if params['expand'] =~ /parentCollection/
+    collections = (data['units'] || []).map { |unit|
+      xmlGen('''
+        <parentCollection>
+          <link>/rest/collections/13030/<%= unit["id"] %></link>
+          <expand>parentCommunityList</expand>
+          <expand>parentCommunity</expand>
+          <expand>items</expand>
+          <expand>license</expand>
+          <expand>logo</expand>
+          <expand>all</expand>
+          <handle>13030/<%= unit["id"] %></handle>
+          <name><%= unit.dig("parents", 0, "name") + ": " + unit["name"] %></name>
+          <type>collection</type>
+          <UUID><%= unit["id"] %></UUID>
+          <copyrightText/>
+          <introductoryText/>
+          <numberItems><%= unit.dig("items", "total") %></numberItems>
+          <shortDescription><%= unit["id"] %></shortDescription>
+          <sidebarText/>
+        </parentCollection>''', binding, xml_header: false)
+    }.join("\n")
+  else
+    collections = ""
+  end
 
-  bitstreams = ""
-  if data['contentLink'] && data['contentType'] == "application/pdf"
-    bitstreamUUID = data["contentLink"].sub(%r{.*content/},'')
-    bitstreams = xmlGen('''
-      <bitstreams>
-        <link><%= data["contentLink"] %></link>
-        <expand>parent</expand>
-        <expand>policies</expand>
-        <expand>all</expand>
-        <name><%= File.basename(data["contentLink"]) %></name>
-        <type>bitstream</type>
-        <UUID><%= bitstreamUUID %></UUID>
-        <bundleName>ORIGINAL</bundleName>
-        <description>Accepted version</description>
-        <format>Adobe PDF</format>
-        <mimeType>application/pdf</mimeType>
-        <link><%= data["contentLink"] %></link>
-        <sequenceId>-1</sequenceId>
-        <sizeBytes>999</sizeBytes>
-      </bitstreams>''', binding, xml_header: false)
+  if params['expand'] =~ /bitstreams/
+    arr = []
+    if data['contentLink'] && data['contentType'] == "application/pdf"
+      if data['nativeFileName']
+        arr << { id: "#{itemID}/content/#{data['nativeFileName']}",
+                 name: data['nativeFileName'], size: data['nativeFileSize'],
+                 link: filePreviewLink(itemID, "content/#{data['nativeFileName']}"),
+                 type: data['contentType'] }
+      else
+        arr << { id: "#{itemID}/content/#{itemID}.pdf",
+                 name: "#{itemID}.pdf", size: data['contentSize'],
+                 link: filePreviewLink(itemID, "content/#{itemID}.pdf"),
+                 type: data['contentType'] }
+      end
+    end
+    (data['suppFiles'] || []).each { |supp|
+        arr << { id: "#{itemID}/content/supp/#{supp['file']}",
+                 name: supp['file'], size: supp['size'],
+                 link: filePreviewLink(itemID, "content/supp/#{supp['file']}"),
+                 type: supp['contentType'] }
+    }
+    bitstreams = arr.map.with_index { |info, idx|
+      # Yes, it's wierd, but DSpace generates one <bitstreams> (plural) element for each bitstream.
+      # Maybe somebody would have noticed this if they had bothered documenting their API.
+      xmlGen('''
+        <bitstreams>
+          <link><%= info[:link] %></link>
+          <expand>parent</expand>
+          <expand>policies</expand>
+          <expand>all</expand>
+          <name><%= info[:name] %></name>
+          <type>bitstream</type>
+          <UUID><%= info[:id] %></UUID>
+          <bundleName>ORIGINAL</bundleName>
+          <description>File</description>
+          <format>File</format>
+          <mimeType><%= info[:type] %></mimeType>
+          <retrieveLink><%= info[:link] %></retrieveLink>
+          <sequenceId><%= idx+1 %></sequenceId>
+          <sizeBytes><%= info[:size] %></sizeBytes>
+        </bitstreams>''', binding, xml_header: false)
+    }.join("\n")
   end
 
   content_type "text/xml"
@@ -287,6 +341,12 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
 end
 
 ###################################################################################################
+def errHalt(httpCode, message)
+  puts "Error #{httpCode}: #{message}"
+  halt httpCode, message
+end
+
+###################################################################################################
 post "/dspace-swordv2/collection/13030/:collection" do |collection|
 
   # POST /dspace-swordv2/collection/13030/cdl_rw
@@ -297,12 +357,15 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   # Parse the body as XML, and locate the <entry>
   request.body.rewind
   body = Nokogiri::XML(request.body.read).remove_namespaces!
-  puts "Sword post body: #{body.inspect}"
-  entry = body.xpath("entry") or raise("can't locate <entry> in request: #{body}")
+  entry = body.xpath("entry") or errHalt(400, "can't locate <entry> in request: #{body}")
 
   # Grab the Elements GUID for this publication
   title = (entry.xpath("title") or raise("can't locate <title> in entry: #{body}")).text
-  guid = title[/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/] or raise("can't find guid in title #{title.inspect}")
+  guid = title[/\b\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\b/] or errHalt(400, "can't find guid in title #{title.inspect}")
+
+  # Omitting the "in-progress" header would imply that we should commit this item now, but we have
+  # no metadata so that would not be reasonable.
+  request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
 
   # Make an eschol ARK for this pub (if we've seen the pub before, the same old ark will be returned)
   ark = mintArk(guid)
@@ -330,81 +393,99 @@ end
 
 ###################################################################################################
 put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
-  # PUT /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/metadata
-  # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
-  #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
-  #                            ...
-
   # The ID should be an ARK, obtained earlier from the Sword post.
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
+  destroyOnFail(itemID) { # clean up after ourselves if anything goes wrong
 
-  # Grab the body. It should be an XML set of metadata entries.
-  request.body.rewind
-  body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
-  puts "dspaceMetaPut: body=#{body.to_xml}"
+    # PUT /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/metadata
+    # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
+    #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
+    #                            ...
 
-  # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
-  # we created in the earlier sword post.
-  pubID = body.xpath(".//metadataentry").map { |ent|
-    ent.text_at("key") == "elements-pub-id" ? ent.text_at("value") : nil
-  }.compact[0] or raise("Can't find publication ID in feed")
-  puts "Found pubID #{pubID.inspect}."
-  $arkDb.execute("UPDATE arks SET external_id=?, source=?, external_url=? WHERE id=?",
-    [pubID, 'elements', nil, "ark:13030/#{itemID}"])  # note missing slash - a very old error we still have to propagate
 
-  # Test out the user error mechanism
-  userErrorHalt(itemID, "We think you made a mistake.")
+    # Grab the body. It should be an XML set of metadata entries.
+    request.body.rewind
+    body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
+    puts "dspaceMetaPut: body=#{body.to_xml}"
 
-  # Update the metadata on disk
-  checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
+    # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
+    # we created in the earlier sword post.
+    pubID = who = nil
+    body.xpath(".//metadataentry").each { |ent|
+      ent.text_at("key") == "elements-pub-id" and pubID = ent.text_at("value")
+      ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
+    }
+    pubID or raise("Can't find elements-pub-id in feed")
+    who or raise("Can't find depositor-email in feed")
 
-  # All done.
-  content_type "text/plain"
-  nil  # content length zero, and HTTP 200 OK
+    puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
+    $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
+    $recentArkInfo[itemID] = { pubID: pubID, who: who }
+
+    # Make sure it hasn't already been deposited (would indicate that somehow Elements didn't
+    # record the connection)
+    if $arkDb.get_first_value("SELECT external_id FROM arks WHERE source='elements' AND external_id=?", pubID)
+      userErrorHalt(itemID, "This publication was already deposited.")
+    end
+
+    # Now that we have a real pub ID, record it in the ark database.
+    $arkDb.execute("UPDATE arks SET external_id=? WHERE source=? AND id=?",
+      [pubID, 'elements', normalizeArk(itemID).sub("ark:/", "ark:")])
+
+    # Update the metadata on disk
+    checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
+
+    # All done.
+    content_type "text/plain"
+    nil  # content length zero, and HTTP 200 OK
+  }
 end
 
 ###################################################################################################
 post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
-  content_type "text/xml"
-
   shortArk =~ /^qt\w{8}$/ or raise("invalid ARK")
 
-  fileName = params['name'] or raise("missing 'name' param")
-  fileVersion = params['description']  # will be missing if user chose '[None]'
+  destroyOnFail(shortArk) { # clean up after ourselves if anything goes wrong
 
-  request.body.rewind
-  outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
+    content_type "text/xml"
 
-  # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
-  # TODO - customize raw response
-  xmlGen('''
-    <bitstream>
-      <link>/rest/bitstreams/<%=shortArk%>/<%=fileName%></link>
-      <expand>parent</expand>
-      <expand>policies</expand>
-      <expand>all</expand>
-      <name><%=outFilename%></name>
-      <type>bitstream</type>
-      <UUID><%=shortArk%>/<%=outFilename%></UUID>
-      <bundleName>ORIGINAL</bundleName>
-      <description><%=fileVersion%></description>
-      <mimeType><%=mimeType%></mimeType>
-      <retrieveLink>/rest/bitstreams/<%=shortArk%>/<%=outFilename%></retrieveLink>
-      <sequenceId>-1</sequenceId>
-      <sizeBytes><%=size%></sizeBytes>
-    </bitstream>''', binding)
+    fileName = params['name'] or raise("missing 'name' param")
+    fileVersion = params['description']  # will be missing if user chose '[None]'
+
+    request.body.rewind
+    outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
+
+    # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
+    # TODO - customize raw response
+    xmlGen('''
+      <bitstream>
+        <link>/rest/bitstreams/<%=shortArk%>/<%=fileName%></link>
+        <expand>parent</expand>
+        <expand>policies</expand>
+        <expand>all</expand>
+        <name><%=outFilename%></name>
+        <type>bitstream</type>
+        <UUID><%=shortArk%>/<%=outFilename%></UUID>
+        <bundleName>ORIGINAL</bundleName>
+        <description><%=fileVersion%></description>
+        <mimeType><%=mimeType%></mimeType>
+        <retrieveLink>/foo/bar</retrieveLink>
+        <sequenceId>-1</sequenceId>
+        <sizeBytes><%=size%></sizeBytes>
+      </bitstream>''', binding)
+  }
 end
 
 ###################################################################################################
-get "/dspace-rest/bitstreams/:itemID/:filename/policy" do |itemID, filename|
+get %r{/dspace-rest/bitstreams/(.+)/policy} do |path|
   content_type "application/atom+xml; type=entry;charset=UTF-8"
   [200, xmlGen('''
     <resourcePolicies>
       <resourcepolicy>
         <action>READ</action>
-        <groupId>8dae5664-cf16-4623-9451-2b094505bca6</groupId>
+        <groupId>0</groupId>
         <id>32</id>
-        <resourceId>#{itemID}/#{filename}</resourceId>
+        <resourceId><%= path %>/</resourceId>
         <resourceType>bitstream</resourceType>
         <rpType>TYPE_INHERITED</rpType>
       </resourcepolicy>
@@ -414,26 +495,49 @@ end
 ###################################################################################################
 delete "/dspace-rest/bitstreams/:itemID/:filename/policy/32" do |itemID, filename|
   # After redepositing a file, Elements goes and deletes the policy from the new file.
-  # Not sure what's going on here. Fake the response for now.
+  # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
+  # the item.
+
+  if isPublished(itemID) && isPending(itemID)
+    info = $recentArkInfo[itemID]
+    if info
+      approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
+    else
+      approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
+    end
+  end
+
+  # Return a fake response.
   [204, "Deleted."]
 end
 
 ###################################################################################################
-post "/dspace-swordv2/edit/:itemGUID" do |itemID|
+post "/dspace-swordv2/edit/:itemID" do |itemID|
   # POST /dspace-swordv2/edit/4463d757-868a-42e2-9aab-edc560089ca1
-  # Not sure what we receive here, nor what we should reply. Original log was incomplete
-  # because Sword rejected the URL due to misconfiguration.
 
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
 
-  # Maybe this is a signal that it's time to publish this thing?
-  approveItem("ark:/13030/#{itemID}", nil, false)
+  destroyOnFail(itemID) { # clean up after ourselves if anything goes wrong
 
-  # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
-  content_type "application/atom+xml; type=entry;charset=UTF-8"
-  [200, xmlGen('''
-    <entry xmlns="http://www.w3.org/2005/Atom"
-    </entry>''', binding, xml_header: false)]
+    # The only reason to send this, we think, is to omit the In-Progress header, telling us to
+    # publish the item.
+    request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
+
+    request.body.rewind
+    request.body.read.strip == "" or errHalt(400, "don't know what to do with actual edit data")
+
+    # Time to publish this thing.
+    info = $recentArkInfo[itemID]
+    if info
+      approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
+    else
+      approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
+    end
+
+    # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
+    content_type "application/atom+xml; type=entry;charset=UTF-8"
+    [200, xmlGen('''<entry xmlns="http://www.w3.org/2005/Atom" />''', binding, xml_header: false)]
+  }
 end
 
 ###################################################################################################
@@ -479,11 +583,27 @@ get "/dspace-oai" do
 end
 
 ###################################################################################################
+def arkToPubID(ark)
+  pubID = $arkDb.get_first_value("SELECT external_id FROM arks WHERE source='elements' AND id=?",
+                                 normalizeArk(ark))
+  pubID && pubID =~ /^\d+$/ and return pubID
+  return ($recentArkInfo[getShortArk(ark)] || {})[:pubID]
+end
+
+###################################################################################################
 def userErrorHalt(ark, msg)
-  shortArk = ark[/qt\w{8}/]
-  $userErrors.size >= MAX_USER_ERRORS and $userErrors.shift
-  $userErrors[shortArk] = { time: Time.now, msg: msg }
-  halt 400, msg
+  puts "Recording user error #{msg.inspect} for ark #{ark.inspect}."
+
+  # Find the pub corresponding to this ARK
+  pubID = arkToPubID(ark)
+  if pubID
+    puts "Found pubID=#{pubID.inspect}"
+    $userErrors.size >= MAX_USER_ERRORS and $userErrors.shift
+    $userErrors[pubID] = { time: Time.now, msg: msg }
+  else
+    puts "Hmm, couldn't find a pub_id"
+  end
+  errHalt(400, msg)
 end
 
 ###################################################################################################
@@ -492,8 +612,20 @@ get "/dspace-userErrorMsg/:pubID" do |pubID|
   origin = request.env['HTTP_ORIGIN']
   origin =~ /oapolicy.universityofcalifornia.edu/ and headers 'Access-Control-Allow-Origin' => origin
 
-  # Find the ARK corresponding to this pub
-  ark = $arkDb.get_first_value("SELECT id FROM arks WHERE source='elements' AND external_id=?", pubID)
-  puts "Found ark #{ark.inspect} for pub #{pubID}."
-  $userErrors[ark] or halt 404, "Unknown pub"
+  # See if we have a pending message associated with this pub ID
+  entry = $userErrors.delete(pubID)
+  entry and return entry[:msg]
+
+  # Huh. Oh well, maybe it wasn't a user error but an internal error instead.
+  errHalt(404, "Unknown pub")
+end
+
+###################################################################################################
+get %r{/dspace-preview/(.*)} do |path|
+  path =~ %r{^(qt\w{8})/(content/.*)} or halt(400)
+  itemID, contentPath = $1, $2
+  contentPath.include?('..') and halt(400)
+  calcContentReadKey(itemID, contentPath) == params['key'] or halt(403)
+  fullPath = arkToFile(itemID, contentPath)
+  send_file(fullPath)
 end
