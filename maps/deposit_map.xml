@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <xwalkout:consolidated-maps xmlns:xwalk="http://www.symplectic.co.uk/elements/xwalkcommon" xmlns:xwalkout="http://www.symplectic.co.uk/elements/xwalkout" xmlns:api="http://www.symplectic.co.uk/publications/api">
   <xwalk:parameters>
-    <!--<xwalk:parameter name="default-keyword-format" value="keyword:with-scheme"/>-->
+    <xwalk:parameter name="dspace-xwalkin-public-access-group-ids" value="0"/>
   </xwalk:parameters>
   <!-- Defines available field-map(s) -->
   <xwalk:field-maps>
