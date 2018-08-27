@@ -42,8 +42,11 @@
           </xwalk:field-source>
         </xwalk:field-source>
       </xwalk:field-mapping>
-      <xwalk:field-mapping to="groups" separator="|">
-        <xwalk:field-source from="object.groups" data-part="group:name" />
+      <xwalk:field-mapping to="groups" separator="">
+        <xwalk:field-source from="object.groups">
+          <xwalk:field-source data-part="group:id" suffix=":" />
+          <xwalk:field-source data-part="group:name" suffix="|" />
+        </xwalk:field-source>
       </xwalk:field-mapping>
       <xwalk:field-mapping to="funder-details">
         <xwalk:field-source from="object.relationships" value-map="grant-relationships">
