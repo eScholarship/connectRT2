@@ -154,7 +154,7 @@
         <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="public-url">
-        <xwalk:field-source from="/item/metadata/permaLink" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="record-created-at-source-date">
         <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
@@ -252,7 +252,7 @@
         <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="public-url">
-        <xwalk:field-source from="/item/metadata/permaLink" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="record-created-at-source-date">
         <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
@@ -341,7 +341,7 @@
         <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="public-url">
-        <xwalk:field-source from="/item/metadata/permaLink" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="record-created-at-source-date">
         <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
@@ -415,7 +415,7 @@
         <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="public-url">
-        <xwalk:field-source from="/item/metadata/permaLink" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="record-created-at-source-date">
         <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
@@ -473,7 +473,7 @@
         <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="public-url">
-        <xwalk:field-source from="/item/metadata/permaLink" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="record-created-at-source-date">
         <xwalk:field-source from="/item/metadata/added" select-using="xpath" />

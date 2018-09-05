@@ -61,6 +61,12 @@
       <xwalk:field-mapping to="depositor-group">
         <xwalk:field-source from="depositor.primary-group-descriptor" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="deposit-type">
+        <xwalk:field-source from="deposit.type" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="deposit-date">
+        <xwalk:field-source from="deposit.date" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="oa-location-url">
         <xwalk:field-source from="oa-location-url" />
       </xwalk:field-mapping>
