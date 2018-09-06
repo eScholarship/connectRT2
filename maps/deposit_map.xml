@@ -31,7 +31,8 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="editors" is-list="true" separator="||&#xD;&#xA;">
         <xwalk:field-source from="editors">
-          <xwalk:field-source data-part="person:lastname" prefix="&#xD;&#xA;[lastname] " />
+          <xwalk:field-source value="start" prefix="&#xD;&#xA;[start-person]" value-map="no-text" />
+          <xwalk:field-source data-part="person:lastname" prefix="[lastname] " />
           <xwalk:field-source data-part="person:firstnames" prefix="[firstnames] " />
           <xwalk:field-source data-part="person:initials" prefix="[initials] " />
           <xwalk:field-source data-part="person:identifier" prefix="[identifier] " />
@@ -40,6 +41,10 @@
           <xwalk:field-source data-part="person:resolved-user">
             <xwalk:field-source from="user.email-address" prefix="[resolved-user-email] " />
           </xwalk:field-source>
+          <xwalk:field-source data-part="person:resolved-user">
+            <xwalk:field-source from="api:object/api:user-identifier-associations" value-map="extract-orcid" select-using="xpath" prefix="[resolved-user-orcid] " />
+          </xwalk:field-source>
+          <xwalk:field-source value="end" prefix="[end-person]" value-map="no-text" />
         </xwalk:field-source>
       </xwalk:field-mapping>
       <xwalk:field-mapping to="groups" separator="">
@@ -52,6 +57,13 @@
         <xwalk:field-source from="object.relationships" value-map="grant-relationships">
           <xwalk:field-source data-part="relationship:other-object">
             <xwalk:field-source from="api:object/api:view/api:field[@name='funder-name']" select-using="xpath"/>
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="funder-reference" separator="|">
+        <xwalk:field-source from="object.relationships" value-map="grant-relationships">
+          <xwalk:field-source data-part="relationship:other-object">
+            <xwalk:field-source from="api:object/api:view/api:field[@name='funder-reference']" select-using="xpath"/>
           </xwalk:field-source>
         </xwalk:field-source>
       </xwalk:field-mapping>
@@ -88,6 +100,9 @@
       <xwalk:field-mapping to="title">
         <xwalk:field-source from="title" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="parent-title">
+        <xwalk:field-source from="parent-title" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="abstract">
         <xwalk:field-source from="abstract" />
       </xwalk:field-mapping>
@@ -99,6 +114,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="journal">
         <xwalk:field-source from="journal" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="proceedings">
+        <xwalk:field-source from="//api:field[@name='journal'][@display-name='Published proceedings']" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="volume">
         <xwalk:field-source from="volume" />
@@ -130,6 +148,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="doi" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="report-number">
+        <xwalk:field-source from="number" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="keywords">
         <xwalk:field-source from="object.labels" format="keyword:with-scheme"/>
