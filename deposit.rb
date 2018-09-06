@@ -34,18 +34,23 @@ $arkDb = SQLite3::Database.new("#{$controlDir}/db/arks.db")
 $arkDb.busy_timeout = 30000
 
 ###################################################################################################
-# Strings to pick out from <organisational-details>/</group> to determine campus.
-$campusNames = { 'Lawrence Berkeley Lab' => 'lbnl',
-                 'UC Berkeley'           => 'ucb',
-                 'UC Davis'              => 'ucd',
-                 'UC Irvine'             => 'uci',
-                 'UC Los Angeles'        => 'ucla',
-                 'UC Merced'             => 'ucm',
-                 'UC Riverside'          => 'ucr',
-                 'UC San Diego'          => 'ucsd',
-                 'UC San Francisco'      => 'ucsf',
-                 'UC Santa Barbara'      => 'ucsb',
-                 'UC Santa Cruz'         => 'ucsc' }
+# Elements group IDs, used to determine into which campus postprint bucket to deposit.
+$groupToCampus = { 684 => 'lbnl',
+                   430 => 'ucb',
+                   431 => 'ucd',
+                   3   => 'uci',
+                   4   => 'ucla',
+                   400 => 'ucm',
+                   432 => 'ucr',
+                   282 => 'ucsd',
+                   2   => 'ucsf',
+                   286 => 'ucsb',
+                   280 => 'ucsc' }
+
+$groupToRGPO = { 784 => 'CBCRP',
+                 785 => 'CHRP',
+                 787 => 'TRDRP',
+                 786 => 'UCRI' }
 
 ###################################################################################################
 # Make a filename from the outside safe for use as a file on our system.
@@ -567,6 +572,64 @@ def convertFileVersion(fileVersion)
 end
 
 ###################################################################################################
+def assignSeries(xml, oldEnts, completionDate, metaHash)
+  # See https://docs.google.com/document/d/1U_DG-_iPOnS_Rp8Wu6COIgcNcicDtonOM9aZCCsJoQI/edit
+  # for a prose description of our method here.
+
+  # In general we want to retain existing units. Grab a list of those first.
+  series = Set.new(oldEnts.map { |ent|
+    # Filter out old RGPO errors
+    ent[:id] =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/ ? nil : ent[:id]
+  }.compact)
+
+  # Make a list of campus associations using the Elements groups associated with the incoming item.
+  # Format of the groups string is e.g. "435:UC Berkeley (senate faculty)|430:UC Berkeley|..."
+  groupStr = metaHash.delete("groups") or raise("missing 'groups' in deposit data")
+  campusSeries = groupStr.split("|").map { |pair|
+    pair =~ /^(\d+):(.*)$/ or raise("can't parse group pair #{pair.inspect}")
+    groupID, groupName = $1.to_i, $2
+
+    # Regular campus
+    if $groupToCampus[groupID]
+      (groupID == 684) ? "lbnl_rw" : "#{$groupToCampus[groupID]}_postprints"
+
+    # RGPO special logic
+    elsif $groupToRGPO[groupID]
+      # If completed on or after 2017-01-08, check funding
+      if (completionDate >= Date.new(2017,1,8)) && (metaHash['funder-name'] =~ /(CBCRP|CHRP|TRDRP|UCRI)/)
+        "$1_rw"
+      else
+        "rgpo_rw"
+      end
+    else
+      nil
+    end
+  }.compact
+
+  # Add campus series in sorted order (exception: lbnl first)
+  series += campusSeries.sort { |a, b| a.sub('lbnl','0') <=> b.sub('lbnl','0') }
+
+  #
+end
+
+###################################################################################################
+def getCompletionDate(uci, metaHash)
+  # If there's a recorded escholPublicationDate, use that.
+  uciCompleted = uci.text_at("//history/escholPublicationDate")
+  if uciCompleted
+    begin
+      return Date.parse(uciCompleted, "%d-%m-%Y")
+    rescue ArgumentError
+      # pass
+    end
+  end
+
+  # Otherwise, use the deposit date from the feed
+  feedCompleted = metaHash['deposit-date'] or raise("can't find deposit-date")
+  return Date.parse(feedCompleted, "%d-%m-%Y")
+end
+
+###################################################################################################
 # Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
 # data in, it will be retained if Elements doesn't override it.
 # NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
@@ -601,6 +664,7 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   contextEl = uci.find! 'context'
   oldEntities = contextEl.xpath(".//entity").dup    # record old entities so we can reconstruct and add to them
   contextEl.rebuild { |xml|
+      assignSeries(xml, oldEntities, getCompletionDate(uci, metaHash), metaHash)
       xml.localID(:type => 'oa_harvester') { xml.text(metaHash.delete('elements-pub-id') || raise("missing pub-id")) }
       metaHash.key?("issn") and xml.issn(metaHash.delete("issn"))
       metaHash.key?("isbn-13") and xml.isbn(metaHash.delete("isbn-13")) # for books and chapters
@@ -673,7 +737,7 @@ def isMetaChanged(ark, feedData)
   rescue Exception => e
     puts "Warning: unable to parse feed: #{e}"
     puts e.backtrace
-    return false
+    return true
   end
 
   # See if there's any significant change

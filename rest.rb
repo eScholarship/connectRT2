@@ -241,6 +241,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     }
   }
   data = apiQuery("item(id: $itemID) { #{itemFields} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  data or halt(404)
   data.delete_if{ |k,v| v.nil? || (v.respond_to?(:empty) && v.empty?) }
 
   if params['expand'] =~ /metadata/
