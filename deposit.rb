@@ -689,6 +689,34 @@ def convertOALocation(metaHash, xml)
 end
 
 ###################################################################################################
+def assignEmbargo(metaHash, uci)
+  reqPeriod = metaHash.delete("requested-embargo.display-name")
+
+  if uci[:embargoDate] && uci.xpath("source") == 'subi' &&
+          (uci[:state] == 'published' || uci.xpath("history/stateChange[@state='published']"))
+    # Do not allow embargo of published item to be overridden. Why? Because say somebody edits a
+    # record from Subi using Elements -- they may not be aware there was an embargo, and Elements
+    # would blithely un-embargo it.
+  elsif metaHash.delete("confidential") == "true"
+    uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
+  else
+    case reqPeriod
+      when /Not known|No embargo/
+        uci.xpath("@embargoDate").remove
+      when /Indefinite/
+        uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
+      when /^(\d+) month(s?)/
+        history = uci.at 'history'
+        baseDate = (history && history.at('escholPublicationDate')) ?
+                     Date.parse(history.text_at('escholPublicationDate')) : Date.today
+        uci[:embargoDate] = (baseDate >> ($1.to_i)).iso8601
+      else
+        raise "Unknown embargo period format: '#{period}'"
+    end
+  end
+end
+
+###################################################################################################
 # Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
 # data in, it will be retained if Elements doesn't override it.
 # NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
@@ -706,6 +734,7 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   uci[:type] = convertPubType(elementsPubType)
   (fileVersion && fileVersion != 'Supporting information') and uci[:externalPubVersion] = convertFileVersion(fileVersion)
+  assignEmbargo(metaHash, uci)
 
   # Author and editor metadata.
   transformPeople(uci, metaHash, 'author')
