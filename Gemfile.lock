@@ -15,6 +15,7 @@ GEM
     mini_portile2 (2.3.0)
     multi_xml (0.6.0)
     mustermann (1.0.2)
+    mysql2 (0.5.2)
     netrc (0.11.0)
     nokogiri (1.8.4)
       mini_portile2 (~> 2.3.0)
@@ -28,6 +29,7 @@ GEM
     rerun (0.13.0)
       listen (~> 3.0)
     ruby_dep (1.5.0)
+    sequel (5.12.0)
     sinatra (2.0.3)
       mustermann (~> 1.0)
       rack (~> 2.0)
@@ -46,10 +48,12 @@ DEPENDENCIES
   erubis
   httparty
   json
+  mysql2
   netrc
   nokogiri
   open4
   rerun
+  sequel
   sinatra
   sqlite3
   unindent

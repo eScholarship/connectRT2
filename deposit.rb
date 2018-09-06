@@ -11,6 +11,7 @@ require 'netrc'
 require 'sqlite3'
 require 'equivalent-xml'
 require 'net/smtp'
+require 'sequel'
 require 'unindent'
 require "#{$espylib}/ark.rb"
 require "#{$espylib}/subprocess.rb"
@@ -18,6 +19,15 @@ require "#{$espylib}/xmlutil.rb"
 require "#{$espylib}/stringutil.rb"
 require "#{$subiDir}/lib/rawItem.rb"
 require "#{$subiDir}/lib/subiGuts.rb"
+
+# Connect to the eschol5 database server
+DB = Sequel.connect({
+  "adapter"  => "mysql2",
+  "host"     => ENV["ESCHOL_DB_HOST"] || raise("missing env ESCHOL_DB_HOST"),
+  "port"     => ENV["ESCHOL_DB_PORT"] || raise("missing env ESCHOL_DB_PORT").to_i,
+  "database" => ENV["ESCHOL_DB_DATABASE"] || raise("missing env ESCHOL_DB_DATABASE").to_i,
+  "username" => ENV["ESCHOL_DB_USERNAME"] || raise("missing env ESCHOL_DB_USERNAME"),
+  "password" => ENV["ESCHOL_DB_PASSWORD"] || raise("missing env ESCHOL_DB_HOST") })
 
 ###################################################################################################
 # Use absolute paths to executables so we don't depend on PATH env (monit doesn't give us a good PATH)
@@ -577,17 +587,23 @@ def assignSeries(xml, oldEnts, completionDate, metaHash)
   # for a prose description of our method here.
 
   # In general we want to retain existing units. Grab a list of those first.
-  series = Set.new(oldEnts.map { |ent|
+  # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
+  series = {}
+  oldEnts.each { |ent|
     # Filter out old RGPO errors
-    ent[:id] =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/ ? nil : ent[:id]
-  }.compact)
+    if !ent[:id] =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/
+      series[ent[:id]] = true
+    end
+  }
 
   # Make a list of campus associations using the Elements groups associated with the incoming item.
   # Format of the groups string is e.g. "435:UC Berkeley (senate faculty)|430:UC Berkeley|..."
   groupStr = metaHash.delete("groups") or raise("missing 'groups' in deposit data")
-  campusSeries = groupStr.split("|").map { |pair|
+  groups = Hash[groupStr.split("|").map { |pair|
     pair =~ /^(\d+):(.*)$/ or raise("can't parse group pair #{pair.inspect}")
-    groupID, groupName = $1.to_i, $2
+    [$1.to_i, $2]
+  }]
+  campusSeries = groups.map { |groupID, groupName|
 
     # Regular campus
     if $groupToCampus[groupID]
@@ -596,8 +612,8 @@ def assignSeries(xml, oldEnts, completionDate, metaHash)
     # RGPO special logic
     elsif $groupToRGPO[groupID]
       # If completed on or after 2017-01-08, check funding
-      if (completionDate >= Date.new(2017,1,8)) && (metaHash['funder-name'] =~ /(CBCRP|CHRP|TRDRP|UCRI)/)
-        "$1_rw"
+      if (completionDate >= Date.new(2017,1,8)) && (metaHash['funder-name'].include?($groupToRGPO[groupID]))
+        "#{$groupToRGPO[groupID].downcase}_rw"
       else
         "rgpo_rw"
       end
@@ -606,10 +622,30 @@ def assignSeries(xml, oldEnts, completionDate, metaHash)
     end
   }.compact
 
-  # Add campus series in sorted order (exception: lbnl first)
-  series += campusSeries.sort { |a, b| a.sub('lbnl','0') <=> b.sub('lbnl','0') }
+  # Add campus series in sorted order (special: always sort lbnl first)
+  campusSeries.sort { |a, b| a.sub('lbnl','0') <=> b.sub('lbnl','0') }.each { |s|
+    series.key?(s) or series[s] = true
+  }
 
-  #
+  # Figure out which departments correspond to which Elements groups
+  depts = Hash[DB.fetch("""SELECT id unit_id, attrs->>'$.elements_id' elements_id FROM units
+                           WHERE attrs->>'$.elements_id' is not null""").map { |row|
+    [row[:elements_id].to_i, row[:unit_id]]
+  }]
+
+  # Add any matching departments for this publication
+  deptSeries = groups.map { |groupID, groupName|
+    depts[groupID]
+  }.compact
+
+  # Add department series in sorted order (and avoid dupes)
+  deptSeries.sort.each { |s| series.key?(s) or series[s] = true }
+
+  # And finally, build all the deduplicated <context>/<entity> elements
+  series.keys.each { |id|
+    row = DB.fetch("SELECT name, type FROM units WHERE id = ?", [id]).first or raise("series assign failed")
+    xml.entity(id: id, entityLabel: row[:name], entityType: row[:type])
+  }
 end
 
 ###################################################################################################
@@ -630,6 +666,29 @@ def getCompletionDate(uci, metaHash)
 end
 
 ###################################################################################################
+def convertFunding(metaHash, uci)
+  fundingEl = uci.find! 'funding'
+  fundingEl.rebuild { |xml|
+    funderNames = metaHash.delete("funder-name").split("|")
+    funderIds   = metaHash.delete("funder-reference").split("|")
+    funderNames.each.with_index { |name, idx|
+      xml.grant(:id => funderIds[idx],
+                :name => name)
+    }
+  }
+end
+
+###################################################################################################
+def convertOALocation(metaHash, xml)
+  loc = metaHash.delete("oa-location-url")
+  if loc =~ %r{ucelinks.cdlib.org}
+    userErrorHalt("The link you provided may not be accessible to readers outside of UC. \n" +
+                  "Please provide a link to an open access version of this article.")
+  end
+  xml.publishedWebLocation(loc)
+end
+
+###################################################################################################
 # Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
 # data in, it will be retained if Elements doesn't override it.
 # NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
@@ -644,7 +703,8 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   uci[:peerReview] = uci[:peerReview] || 'yes'
   uci[:state] = uci[:state] || 'new'
   uci[:stateDate] = uci[:stateDate] || DateTime.now.iso8601
-  uci[:type] = convertPubType(metaHash.delete('object.type') || raise("missing object.type"))
+  elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
+  uci[:type] = convertPubType(elementsPubType)
   (fileVersion && fileVersion != 'Supporting information') and uci[:externalPubVersion] = convertFileVersion(fileVersion)
 
   # Author and editor metadata.
@@ -659,6 +719,7 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   (metaHash.key?('fpage') || metaHash.key?('lpage')) and convertExtent(metaHash, uci)
   metaHash.key?('keywords') and convertKeywords(metaHash.delete('keywords'), uci)
   uci.find!('rights').content = convertRights(metaHash.delete('requested-reuse-licence.short-name'))
+  metaHash.key?('funder-name') and convertFunding(metaHash, uci)
 
   # Things that go inside <context>
   contextEl = uci.find! 'context'
@@ -666,14 +727,16 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   contextEl.rebuild { |xml|
       assignSeries(xml, oldEntities, getCompletionDate(uci, metaHash), metaHash)
       xml.localID(:type => 'oa_harvester') { xml.text(metaHash.delete('elements-pub-id') || raise("missing pub-id")) }
+      metaHash.key?("report-number") and xml.localID(:type => 'report') { |xml| xml.text(metaHash.delete('report-number')) }
       metaHash.key?("issn") and xml.issn(metaHash.delete("issn"))
       metaHash.key?("isbn-13") and xml.isbn(metaHash.delete("isbn-13")) # for books and chapters
       metaHash.key?("journal") and xml.journal(metaHash.delete("journal"))
-      # TODO: deal with proceedings
+      metaHash.key?("proceedings") and xml.proceedings(metaHash.delete("proceedings"))
       metaHash.key?("volume") and xml.volume(metaHash.delete("volume"))
       metaHash.key?("issue") and  xml.issue(metaHash.delete("issue"))
-      #metaHash.key?("parent-title") and xml.bookTitle e.text }  # for chapters
-      metaHash.key?("oa-location-url") and xml.publishedWebLocation(metaHash.delete("oa-location-url"))
+      metaHash.key?("parent-title") and xml.bookTitle(metaHash.delete("parent-title"))  # for chapters
+      metaHash.key?("oa-location-url") and convertOALocation(metaHash, xml)
+      xml.ucpmsPubType elementsPubType
   }
 
   # Things that go inside <history>
@@ -814,10 +877,9 @@ def transformPeople(uci, metaHash, authOrEd)
         when 'resolved-user-orcid'
           person[:orcid] = data
         when 'identifier'
-          puts "TODO: Handle identifiers like #{data.inspect}"
+          #puts "TODO: Handle identifiers like #{data.inspect}"
         when 'end-person'
           if !person.empty?
-            puts "Sending person #{person.inspect}"
             xml.send(authOrEd) {
               person[:fname] and xml.fname(person[:fname])
               person[:lname] and xml.lname(person[:lname])
