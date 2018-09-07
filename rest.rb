@@ -19,6 +19,89 @@ $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
 
 ###################################################################################################
+ITEM_FIELDS = %{
+  id
+  title
+  authors {
+    nodes {
+      email
+      orcid
+      nameParts {
+        fname
+        mname
+        lname
+        suffix
+        institution
+        organization
+      }
+    }
+  }
+  contributors {
+    nodes {
+      role
+      email
+      nameParts {
+        fname
+        mname
+        lname
+        suffix
+        institution
+        organization
+      }
+    }
+  }
+  localIDs {
+    id
+    scheme
+  }
+  units {
+    id
+    name
+    parents {
+      name
+    }
+  }
+  abstract
+  added
+  bookTitle
+  contentLink
+  contentType
+  contentSize
+  disciplines
+  embargoExpires
+  externalLinks
+  pagination
+  grants
+  issn
+  isbn
+  journal
+  issue
+  volume
+  keywords
+  publisher
+  published
+  language
+  permalink
+  proceedings
+  published
+  rights
+  source
+  status
+  subjects
+  title
+  type
+  ucpmsPubType
+  updated
+  nativeFileName
+  nativeFileSize
+  suppFiles {
+    file
+    size
+    contentType
+  }
+}
+
+###################################################################################################
 # Nice way to generate XML, just using ERB-like templates instead of Builder's weird syntax.
 def xmlGen(templateStr, bnding, xml_header: true)
   $templates ||= {}
@@ -155,103 +238,18 @@ def filePreviewLink(itemID, contentPath)
 end
 
 ###################################################################################################
-get %r{/dspace-rest/(items|handle)/(.*)} do
-  verifyLoggedIn
-  request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
-  itemID = $1
-  itemFields = %{
-    id
-    title
-    authors {
-      nodes {
-        email
-        orcid
-        nameParts {
-          fname
-          mname
-          lname
-          suffix
-          institution
-          organization
-        }
-      }
-    }
-    contributors {
-      nodes {
-        role
-        email
-        nameParts {
-          fname
-          mname
-          lname
-          suffix
-          institution
-          organization
-        }
-      }
-    }
-    localIDs {
-      id
-      scheme
-    }
-    units {
-      id
-      name
-      parents {
-        name
-      }
-    }
-    abstract
-    added
-    bookTitle
-    contentLink
-    contentType
-    contentSize
-    disciplines
-    embargoExpires
-    externalLinks
-    pagination
-    grants
-    issn
-    isbn
-    journal
-    issue
-    volume
-    keywords
-    publisher
-    published
-    language
-    permalink
-    proceedings
-    published
-    rights
-    source
-    status
-    subjects
-    title
-    type
-    ucpmsPubType
-    updated
-    nativeFileName
-    nativeFileSize
-    suppFiles {
-      file
-      size
-      contentType
-    }
-  }
-  data = apiQuery("item(id: $itemID) { #{itemFields} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
-  data or halt(404)
+def formatItemData(data, expand)
   data.delete_if{ |k,v| v.nil? || (v.respond_to?(:empty) && v.empty?) }
+  itemID = data['id'] or raise("expected to get item ID")
 
-  if params['expand'] =~ /metadata/
+  if expand =~ /metadata/
     metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
   else
     metaXML = ""
   end
   lastMod = Time.parse(data.dig("updated")).strftime("%Y-%m-%d %H:%M:%S")
 
-  if params['expand'] =~ /parentCollection/
+  if expand =~ /parentCollection/
     collections = (data['units'] || []).map { |unit|
       xmlGen('''
         <parentCollection>
@@ -277,7 +275,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     collections = ""
   end
 
-  if params['expand'] =~ /bitstreams/
+  if expand =~ /bitstreams/
     arr = []
     if data['contentLink'] && data['contentType'] == "application/pdf"
       if data['nativeFileName']
@@ -321,8 +319,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     }.join("\n")
   end
 
-  content_type "text/xml"
-  xmlGen('''
+  return xmlGen('''
     <item>
       <link>/rest/items/13030/<%= itemID %></link>
       <expand>parentCommunityList</expand>
@@ -338,7 +335,53 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
       <%== collections.gsub("parentCollection", "parentCollectionList") %>
       <withdrawn><%= data.dig("status") == "WITHDRAWN" %></withdrawn>
       <%== bitstreams %>
-    </item>''', binding)
+    </item>''', binding, xml_header: false)
+end
+
+###################################################################################################
+get %r{/dspace-rest/(items|handle)/(.*)} do
+  verifyLoggedIn
+  request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
+  itemID = $1
+  content_type "text/xml"
+  data = apiQuery("item(id: $itemID) { #{ITEM_FIELDS} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  data or halt(404)
+  return '<?xml version="1.0" encoding="UTF-8">\n' + formatItemData(data, params['expand'])
+end
+
+###################################################################################################
+get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
+  verifyLoggedIn
+
+  collection =~ /^(cdl_rw|iis_general|root)$/ or halt(404, "Invalid collection")
+
+  offset = (params['offset'] || 0).to_i
+
+  limit  = (params['limit'] || 10).to_i
+  limit >= 1 && limit <= 100 or halt(401, "Limit out of range")
+
+  if offset > 0
+    moreToken, expectedOffset = $nextMoreToken[collection]
+    expectedOffset == offset or halt(401, "Crawled out of order")
+  else
+    moreToken = nil
+  end
+
+  data = apiQuery("unit(id: $collection) { items(first: $limit, more: $more) { nodes { #{ITEM_FIELDS} } } }",
+            { collection: ["ID!", collection],
+              limit: ["Int", limit],
+              more: ["String", moreToken]
+            }, true).dig("unit", "items", "nodes")
+
+  formatted = (data || []).map { |itemData|
+    formatItemData(itemData, params['expand'])
+  }
+
+  content_type "text/xml"
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+         "<items>" +
+         formatted.join("\n") +
+         "</items>"
 end
 
 ###################################################################################################
@@ -576,8 +619,7 @@ get "/dspace-oai" do
     end
 
     # Proxy the OAI query over to the eschol API server, and return its results
-    response = HTTParty.get("#{$escholServer}/oai", query: params,
-                headers: { 'Privileged' => $rt2creds['graphqlApiKey'] })
+    response = HTTParty.get("#{$escholServer}/oai", query: params, headers: { 'Privileged' => $rt2creds['graphqlApiKey'] })
     content_type response.headers['Content-Type']
     return [response.code, response.body]
   end

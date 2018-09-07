@@ -34,6 +34,15 @@ require_relative "./deposit.rb"
 # Flush stdout after each write
 STDOUT.sync = true
 
+ # Compress things that can benefit
+use Rack::Deflater,
+  :include => %w{application/javascript text/html text/xml text/css application/json image/svg+xml},
+  :if => lambda { |env, status, headers, body|
+    # advice from https://www.itworld.com/article/2693941/cloud-computing/
+    #               why-it-doesn-t-make-sense-to-gzip-all-content-from-your-web-server.html
+    return headers["Content-Length"].to_i > 1400
+  }
+
 ###################################################################################################
 # Simple up/down check
 get "/chk" do
