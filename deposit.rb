@@ -701,7 +701,7 @@ def assignEmbargo(metaHash, uci)
     uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
   else
     case reqPeriod
-      when /Not known|No embargo/
+      when nil, /Not known|No embargo/
         uci.xpath("@embargoDate").remove
       when /Indefinite/
         uci[:embargoDate] = '2999-12-31' # this should be long enough to count as indefinite
@@ -711,8 +711,20 @@ def assignEmbargo(metaHash, uci)
                      Date.parse(history.text_at('escholPublicationDate')) : Date.today
         uci[:embargoDate] = (baseDate >> ($1.to_i)).iso8601
       else
-        raise "Unknown embargo period format: '#{period}'"
+        raise "Unknown embargo period format: '#{reqPeriod}'"
     end
+  end
+end
+
+###################################################################################################
+def convertPubStatus(elementsStatus)
+  case elementsStatus
+    when /None|Unpublished|Submitted/i
+      'internalPub'
+    when /Published/i
+      'externalPub'
+    else
+      'externalAccept'
   end
 end
 
@@ -733,6 +745,7 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   uci[:stateDate] = uci[:stateDate] || DateTime.now.iso8601
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   uci[:type] = convertPubType(elementsPubType)
+  uci[:pubStatus] = convertPubStatus(metaHash.delete('publication-status'))
   (fileVersion && fileVersion != 'Supporting information') and uci[:externalPubVersion] = convertFileVersion(fileVersion)
   assignEmbargo(metaHash, uci)
 

@@ -34,3 +34,8 @@ require_relative "./deposit.rb"
 # Flush stdout after each write
 STDOUT.sync = true
 
+###################################################################################################
+# Simple up/down check
+get "/chk" do
+  "connectRT2 running\n"
+end

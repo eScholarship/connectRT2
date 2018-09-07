@@ -9,4 +9,4 @@ tmp/
 *.log
 *.out
 *.sql_log
-
+*.pid
