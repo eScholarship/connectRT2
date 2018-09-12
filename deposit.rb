@@ -732,6 +732,8 @@ def convertPubStatus(elementsStatus)
 end
 
 ###################################################################################################
+# Lookup, and cache, a RePEc ID for the given pub. We cache to speed the case of checking and
+# immediately updating the metadata.
 def lookupRepecID(elemPubID)
   if !$repecIDs.key?(elemPubID)
     # The only way we know of to get the RePEc ID is to ask the Elements API.
@@ -740,10 +742,10 @@ def lookupRepecID(elemPubID)
       { :username => ENV['ELEMENTS_API_USERNAME'] || raise("missing env ELEMENTS_API_USERNAME"),
         :password => ENV['ELEMENTS_API_PASSWORD'] || raise("missing env ELEMENTS_API_PASSWORD") })
     resp.code == 200 or raise("Got error from Elements API for pub #{elemPubID}: #{resp}")
+
     data = Nokogiri::XML(resp.body).remove_namespaces!
     repecID = data.xpath("//record[@source-name='repec']").map{ |r| r['id-at-source'] }.compact[0]
 
-    # Cache it in case we see this pub again in the near future (e.g. checking meta, then updating)
     $repecIDs.size >= MAX_USER_ERRORS and $repecIDs.shift
     $repecIDs[elemPubID] = repecID
   end
