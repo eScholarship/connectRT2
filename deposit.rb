@@ -29,6 +29,9 @@ DB = Sequel.connect({
   "username" => ENV["ESCHOL_DB_USERNAME"] || raise("missing env ESCHOL_DB_USERNAME"),
   "password" => ENV["ESCHOL_DB_PASSWORD"] || raise("missing env ESCHOL_DB_HOST") })
 
+$repecIDs = {}
+MAX_REPEC_IDS = 10
+
 ###################################################################################################
 # Use absolute paths to executables so we don't depend on PATH env (monit doesn't give us a good PATH)
 $java = "/usr/pkg/java/oracle-8/bin/java"
@@ -450,7 +453,7 @@ def approveItem(ark, pubID, who=nil, okToEmail=true)
   SubiGuts.approveItem(ark, "Submission completed at oapolicy.universityofcalifornia.edu", who)
 
   # Jam the data into the eschol5 database, so that immediate API calls will pick it up.
-  Bundler.with_clean_env {  # super annoying that bundler by default overrides sub-bundlers environments
+  Bundler.with_clean_env {  # super annoying that bundler by default overrides sub-bundlers Gemfiles
     checkCall(["#{$jscholDir}/tools/convert.rb", "--preindex", ark.sub("ark:/13030/", "")])
   }
 
@@ -729,6 +732,25 @@ def convertPubStatus(elementsStatus)
 end
 
 ###################################################################################################
+def lookupRepecID(elemPubID)
+  if !$repecIDs.key?(elemPubID)
+    # The only way we know of to get the RePEc ID is to ask the Elements API.
+    apiHost = ENV['ELEMENTS_API_URL'] || raise("missing env ELEMENTS_API_URL")
+    resp = HTTParty.get("#{apiHost}/publications/#{elemPubID}", :basic_auth =>
+      { :username => ENV['ELEMENTS_API_USERNAME'] || raise("missing env ELEMENTS_API_USERNAME"),
+        :password => ENV['ELEMENTS_API_PASSWORD'] || raise("missing env ELEMENTS_API_PASSWORD") })
+    resp.code == 200 or raise("Got error from Elements API for pub #{elemPubID}: #{resp}")
+    data = Nokogiri::XML(resp.body).remove_namespaces!
+    repecID = data.xpath("//record[@source-name='repec']").map{ |r| r['id-at-source'] }.compact[0]
+
+    # Cache it in case we see this pub again in the near future (e.g. checking meta, then updating)
+    $repecIDs.size >= MAX_USER_ERRORS and $repecIDs.shift
+    $repecIDs[elemPubID] = repecID
+  end
+  return $repecIDs[elemPubID]
+end
+
+###################################################################################################
 # Take feed XML from Elements and make a UCI record out of it. Note that if you pass existing UCI
 # data in, it will be retained if Elements doesn't override it.
 # NOTE: UCI in this context means "UC Ingest" format, the internal metadata format for eScholarship.
@@ -768,7 +790,9 @@ def uciFromFeed(uci, feed, ark, fileVersion = nil)
   oldEntities = contextEl.xpath(".//entity").dup    # record old entities so we can reconstruct and add to them
   contextEl.rebuild { |xml|
       assignSeries(xml, oldEntities, getCompletionDate(uci, metaHash), metaHash)
-      xml.localID(:type => 'oa_harvester') { xml.text(metaHash.delete('elements-pub-id') || raise("missing pub-id")) }
+      elemPubID = metaHash.delete('elements-pub-id') || raise("missing pub-id")
+      xml.localID(:type => 'oa_harvester') { xml.text(elemPubID) }
+      lookupRepecID(elemPubID) and xml.localID(:type => 'repec') { xml.text(lookupRepecID(elemPubID)) }
       metaHash.key?("report-number") and xml.localID(:type => 'report') { |xml| xml.text(metaHash.delete('report-number')) }
       metaHash.key?("issn") and xml.issn(metaHash.delete("issn"))
       metaHash.key?("isbn-13") and xml.isbn(metaHash.delete("isbn-13")) # for books and chapters
