@@ -386,9 +386,9 @@ def sendNewApprovalEmail(ark, depositorEmail)
   url = calcEscholURL(ark, false)
 
   # On dev and stage, don't send to the real people.
-  if !($hostname == 'pub-submit-prd-2a' || $hostname == 'pub-submit-prd-2c')
-    depositorEmail = 'kirk.hastings@ucop.edu'
-    authorEmail = 'kirk.hastings@ucop.edu'
+  if !($escholServer =~ %r{://escholarship.org})
+    depositorEmail = 'r.c.martin.haye@ucop.edu'
+    authorEmail = 'r.c.martin.haye@ucop.edu'
   end
 
   sender = 'oa-no-reply@universityofcalifornia.edu'

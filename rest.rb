@@ -1,5 +1,6 @@
 # A DSpace wrapper around escholarship, used to integrate eschol content into Symplectic Elements
 
+require 'cgi'
 require 'digest'
 require 'erubis'
 require 'securerandom'
@@ -17,6 +18,7 @@ $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
 
 $nextMoreToken = {}
+MAX_NEXT_MORE_TOKEN = 20
 
 $privApiKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
 
@@ -200,7 +202,7 @@ end
 get "/dspace-rest/collections" do
   verifyLoggedIn
   content_type "text/xml"
-  inner = %w{cdl_rw iis_general jtest}.map { |unitID|
+  inner = %w{cdl_rw iis_general jtest root}.map { |unitID|
     data = apiQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
     xmlGen('''
       <collection>
@@ -261,6 +263,8 @@ def formatItemData(data, expand)
 
   if expand =~ /parentCollection/
     collections = (data['units'] || []).map { |unit|
+      parentName = unit.dig("parents", 0, "name")
+      fullUnitName = parentName ? "#{parentName}: #{unit["name"]}" : unit["name"]
       xmlGen('''
         <parentCollection>
           <link>/rest/collections/13030/<%= unit["id"] %></link>
@@ -271,7 +275,7 @@ def formatItemData(data, expand)
           <expand>logo</expand>
           <expand>all</expand>
           <handle>13030/<%= unit["id"] %></handle>
-          <name><%= unit.dig("parents", 0, "name") + ": " + unit["name"] %></name>
+          <name><%= fullUnitName %></name>
           <type>collection</type>
           <UUID><%= unit["id"] %></UUID>
           <copyrightText/>
@@ -291,7 +295,7 @@ def formatItemData(data, expand)
       if data['nativeFileName']
         arr << { id: "#{itemID}/content/#{data['nativeFileName']}",
                  name: data['nativeFileName'], size: data['nativeFileSize'],
-                 link: filePreviewLink(itemID, "content/#{data['nativeFileName']}"),
+                 link: filePreviewLink(itemID, "content/#{CGI.escape(data['nativeFileName'])}"),
                  type: data['contentType'] }
       else
         arr << { id: "#{itemID}/content/#{itemID}.pdf",
@@ -301,9 +305,9 @@ def formatItemData(data, expand)
       end
     end
     (data['suppFiles'] || []).each { |supp|
-        arr << { id: "#{itemID}/content/supp/#{supp['file']}",
+        arr << { id: "#{itemID}/content/supp/#{CGI.escape(supp['file'])}",
                  name: supp['file'], size: supp['size'],
-                 link: filePreviewLink(itemID, "content/supp/#{supp['file']}"),
+                 link: filePreviewLink(itemID, "content/supp/#{CGI.escape(supp['file'])}"),
                  type: supp['contentType'] }
     }
     bitstreams = arr.map.with_index { |info, idx|
@@ -363,7 +367,7 @@ end
 get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   verifyLoggedIn
 
-  collection =~ /^(cdl_rw|iis_general|jtest)$/ or halt(404, "Invalid collection")
+  collection =~ /^(cdl_rw|iis_general|jtest|root)$/ or halt(404, "Invalid collection")
 
   offset = (params['offset'] || 0).to_i
 
@@ -371,10 +375,9 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   limit >= 1 && limit <= 100 or halt(401, "Limit out of range")
 
   if offset > 0
-    moreToken, expectedOffset = $nextMoreToken[collection]
+    moreToken = $nextMoreToken["#{collection}:#{offset}"]
     doQuery = !moreToken.nil?
-    puts "moreToken=#{moreToken.inspect} expectedOffset=#{expectedOffset} doQuery=#{doQuery}"
-    expectedOffset == offset or halt(401, "Crawled out of order")
+    puts "moreToken=#{moreToken.inspect} doQuery=#{doQuery}"
   else
     moreToken = nil
     doQuery = true
@@ -398,7 +401,8 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
     data = {}
   end
 
-  $nextMoreToken[collection] = [data.dig("unit", "items", "more"), offset+limit]
+  $nextMoreToken.size >= MAX_NEXT_MORE_TOKEN and $nextMoreToken.shift
+  $nextMoreToken["#{collection}:#{offset+limit}"] = data.dig("unit", "items", "more")
 
   formatted = (data.dig("unit", "items", "nodes") || []).map { |itemData|
     formatItemData(itemData, params['expand'])
@@ -530,13 +534,13 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     # TODO - customize raw response
     xmlGen('''
       <bitstream>
-        <link>/rest/bitstreams/<%=shortArk%>/<%=fileName%></link>
+        <link>/rest/bitstreams/<%=shortArk%>/<%=CGI.escape(fileName)%></link>
         <expand>parent</expand>
         <expand>policies</expand>
         <expand>all</expand>
         <name><%=outFilename%></name>
         <type>bitstream</type>
-        <UUID><%=shortArk%>/<%=outFilename%></UUID>
+        <UUID><%=shortArk%>/<%=CGI.escape(outFilename)%></UUID>
         <bundleName>ORIGINAL</bundleName>
         <description><%=fileVersion%></description>
         <mimeType><%=mimeType%></mimeType>
@@ -635,6 +639,10 @@ get "/dspace-oai" do
             <setSpec>jtest</setSpec>
             <setName>jtest</setName>
           </set>
+          <set>
+            <setSpec>root</setSpec>
+            <setName>root</setName>
+          </set>
         </ListSets>
       </OAI-PMH>''', binding)
   else
@@ -689,8 +697,8 @@ end
 get %r{/dspace-preview/(.*)} do |path|
   path =~ %r{^(qt\w{8})/(content/.*)} or halt(400)
   itemID, contentPath = $1, $2
-  contentPath.include?('..') and halt(400)
+  CGI.unescape(contentPath).include?('..') and halt(400)
   calcContentReadKey(itemID, contentPath) == params['key'] or halt(403)
-  fullPath = arkToFile(itemID, contentPath)
+  fullPath = arkToFile(itemID, CGI.unescape(contentPath))
   send_file(fullPath)
 end

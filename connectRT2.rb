@@ -12,12 +12,8 @@ $controlDir = getRealPath "#{$erepDir}/control"
 $jscholDir  = getRealPath "#{$homeDir}/eschol5/jschol"
 
 # Go to the right URLs for the front-end+api and submission systems
-$hostname = `/bin/hostname`.strip
-$escholServer, $submitServer = case $hostname
-  when /pub-submit-stg/; ["http://pub-jschol-stg.escholarship.org", "https://pub-submit-stg.escholarship.org"]
-  when /pub-submit-prd/; ["https://escholarship.org",               "https://submit.escholarship.org"]
-  otherwise raise("unrecognized host")
-end
+$escholServer = ENV['ESCHOL_FRONTEND_URL'] || raise("missing env ESCHOL_FRONTEND_URL")
+$submitServer = ENV['ESCHOL_SUBMIT_URL'] || raise("missing env ESCHOL_SUBMIT_URL")
 
 ###################################################################################################
 # External code modules
