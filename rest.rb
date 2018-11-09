@@ -5,8 +5,6 @@ require 'erubis'
 require 'securerandom'
 require 'xmlsimple'
 
-$rt2creds = JSON.parse(File.read("#{$homeDir}/.passwords/rt2_adapter_creds.json"))
-
 $jscholKey = ENV['JSCHOL_KEY'] or raise("missing env JSCHOL_KEY")
 
 $sessions = {}
@@ -17,6 +15,99 @@ MAX_USER_ERRORS = 40
 
 $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
+
+$nextMoreToken = {}
+
+$privApiKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
+
+$rt2Email = ENV['RT2_DSPACE_EMAIL'] or raise("missing env RT2_DSPACE_EMAIL")
+$rt2Password = ENV['RT2_DSPACE_PASSWORD'] or raise("missing env RT2_DSPACE_PASSWORD")
+
+###################################################################################################
+ITEM_FIELDS = %{
+  id
+  title
+  authors {
+    nodes {
+      email
+      orcid
+      nameParts {
+        fname
+        mname
+        lname
+        suffix
+        institution
+        organization
+      }
+    }
+  }
+  contributors {
+    nodes {
+      role
+      email
+      nameParts {
+        fname
+        mname
+        lname
+        suffix
+        institution
+        organization
+      }
+    }
+  }
+  localIDs {
+    id
+    scheme
+  }
+  units {
+    id
+    name
+    parents {
+      name
+    }
+    items {
+      total
+    }
+  }
+  abstract
+  added
+  bookTitle
+  contentLink
+  contentType
+  contentSize
+  disciplines
+  embargoExpires
+  externalLinks
+  pagination
+  grants
+  issn
+  isbn
+  journal
+  issue
+  volume
+  keywords
+  publisher
+  published
+  language
+  permalink
+  proceedings
+  published
+  rights
+  source
+  status
+  subjects
+  title
+  type
+  ucpmsPubType
+  updated
+  nativeFileName
+  nativeFileSize
+  suppFiles {
+    file
+    size
+    contentType
+  }
+}
 
 ###################################################################################################
 # Nice way to generate XML, just using ERB-like templates instead of Builder's weird syntax.
@@ -40,7 +131,8 @@ def apiQuery(query, vars = {}, privileged = false)
   end
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
   headers = { 'Content-Type' => 'application/json' }
-  privileged and headers['Privileged'] = $rt2creds['graphqlApiKey']
+  privKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
+  privileged and headers['Privileged'] = privKey
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
@@ -76,7 +168,7 @@ get "/dspace-rest/status" do
         <email><%=email%></email>
         <fullname>DSpace user</fullname>
         <okay>true</okay>
-      </status>''', {email: $rt2creds['email']})
+      </status>''', {email: $rt2email})
   else
     xmlGen('''
       <status>
@@ -91,7 +183,8 @@ end
 ###################################################################################################
 post "/dspace-rest/login" do
   content_type "text/plain;charset=utf-8"
-  params['email'] == $rt2creds['email'] && params['password'] == $rt2creds['password'] or halt(401, "Unauthorized.\n")
+  puts "expecting email #{$rt2Email.inspect} and pw #{$rt2Password.inspect}"
+  params['email'] == $rt2Email && params['password'] == $rt2Password or halt(401, "Unauthorized.\n")
   $sessions[getSession][:loggedIn] = true
   puts "==> Login ok, setting flag on session."
   "OK\n"
@@ -107,9 +200,8 @@ end
 get "/dspace-rest/collections" do
   verifyLoggedIn
   content_type "text/xml"
-  inner = %w{cdl_rw iis_general root}.map { |unitID|
+  inner = %w{cdl_rw iis_general jtest}.map { |unitID|
     data = apiQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
-    unitID.sub!("root", "jtest")
     xmlGen('''
       <collection>
         <link>/rest/collections/13030/<%= unitID %></link>
@@ -155,103 +247,19 @@ def filePreviewLink(itemID, contentPath)
 end
 
 ###################################################################################################
-get %r{/dspace-rest/(items|handle)/(.*)} do
-  verifyLoggedIn
-  request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
-  itemID = $1
-  itemFields = %{
-    id
-    title
-    authors {
-      nodes {
-        email
-        orcid
-        nameParts {
-          fname
-          mname
-          lname
-          suffix
-          institution
-          organization
-        }
-      }
-    }
-    contributors {
-      nodes {
-        role
-        email
-        nameParts {
-          fname
-          mname
-          lname
-          suffix
-          institution
-          organization
-        }
-      }
-    }
-    localIDs {
-      id
-      scheme
-    }
-    units {
-      id
-      name
-      parents {
-        name
-      }
-    }
-    abstract
-    added
-    bookTitle
-    contentLink
-    contentType
-    contentSize
-    disciplines
-    embargoExpires
-    externalLinks
-    pagination
-    grants
-    issn
-    isbn
-    journal
-    issue
-    volume
-    keywords
-    publisher
-    published
-    language
-    permalink
-    proceedings
-    published
-    rights
-    source
-    status
-    subjects
-    title
-    type
-    ucpmsPubType
-    updated
-    nativeFileName
-    nativeFileSize
-    suppFiles {
-      file
-      size
-      contentType
-    }
-  }
-  data = apiQuery("item(id: $itemID) { #{itemFields} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
-  data or halt(404)
+def formatItemData(data, expand)
   data.delete_if{ |k,v| v.nil? || (v.respond_to?(:empty) && v.empty?) }
+  itemID = data['id'] or raise("expected to get item ID")
+  itemID.sub!("ark:/13030/", "")
 
-  if params['expand'] =~ /metadata/
+  if expand =~ /metadata/
     metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
   else
     metaXML = ""
   end
   lastMod = Time.parse(data.dig("updated")).strftime("%Y-%m-%d %H:%M:%S")
 
-  if params['expand'] =~ /parentCollection/
+  if expand =~ /parentCollection/
     collections = (data['units'] || []).map { |unit|
       xmlGen('''
         <parentCollection>
@@ -277,7 +285,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     collections = ""
   end
 
-  if params['expand'] =~ /bitstreams/
+  if expand =~ /bitstreams/
     arr = []
     if data['contentLink'] && data['contentType'] == "application/pdf"
       if data['nativeFileName']
@@ -321,8 +329,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
     }.join("\n")
   end
 
-  content_type "text/xml"
-  xmlGen('''
+  return xmlGen('''
     <item>
       <link>/rest/items/13030/<%= itemID %></link>
       <expand>parentCommunityList</expand>
@@ -330,15 +337,78 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
       <handle>13030/<%= itemID %></handle>
       <name><%= data["title"] %></name>
       <type>item</type>
-      <%== metaXML %>
       <UUID><%= itemID %></UUID>
       <archived>true</archived>
+      <%== metaXML %>
       <lastModified><%= lastMod %></lastModified>
       <%== collections %>
       <%== collections.gsub("parentCollection", "parentCollectionList") %>
       <withdrawn><%= data.dig("status") == "WITHDRAWN" %></withdrawn>
       <%== bitstreams %>
-    </item>''', binding)
+    </item>''', binding, xml_header: false)
+end
+
+###################################################################################################
+get %r{/dspace-rest/(items|handle)/(.*)} do
+  verifyLoggedIn
+  request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
+  itemID = $1
+  content_type "text/xml"
+  data = apiQuery("item(id: $itemID) { #{ITEM_FIELDS} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  data or halt(404)
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + formatItemData(data, params['expand'])
+end
+
+###################################################################################################
+get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
+  verifyLoggedIn
+
+  collection =~ /^(cdl_rw|iis_general|jtest)$/ or halt(404, "Invalid collection")
+
+  offset = (params['offset'] || 0).to_i
+
+  limit  = (params['limit'] || 10).to_i
+  limit >= 1 && limit <= 100 or halt(401, "Limit out of range")
+
+  if offset > 0
+    moreToken, expectedOffset = $nextMoreToken[collection]
+    doQuery = !moreToken.nil?
+    puts "moreToken=#{moreToken.inspect} expectedOffset=#{expectedOffset} doQuery=#{doQuery}"
+    expectedOffset == offset or halt(401, "Crawled out of order")
+  else
+    moreToken = nil
+    doQuery = true
+  end
+
+  if doQuery
+    data = apiQuery("""
+      unit(id: $collection) {
+        items(first: $limit, more: $more) {
+          more
+          nodes {
+            #{ITEM_FIELDS}
+          }
+        }
+      }""",
+      { collection: ["ID!", collection],
+        limit: ["Int", limit],
+        more: ["String", moreToken]
+      }, true)
+  else
+    data = {}
+  end
+
+  $nextMoreToken[collection] = [data.dig("unit", "items", "more"), offset+limit]
+
+  formatted = (data.dig("unit", "items", "nodes") || []).map { |itemData|
+    formatItemData(itemData, params['expand'])
+  }
+
+  content_type "text/xml"
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+         "<items>" +
+         formatted.join("\n") +
+         "</items>"
 end
 
 ###################################################################################################
@@ -568,16 +638,10 @@ get "/dspace-oai" do
         </ListSets>
       </OAI-PMH>''', binding)
   else
-    if params['set'] == 'jtest'
-      params['verb'] == 'ListIdentifiers' and params['from'] = "2018-05-04T10:20:57Z"
-      params['set'] = "everything"
-    else
-      params['verb'] == 'ListIdentifiers' and params.delete('from') # Disable differential harvest for now
-    end
+    params['verb'] == 'ListIdentifiers' and params.delete('from') # Disable differential harvest for now
 
     # Proxy the OAI query over to the eschol API server, and return its results
-    response = HTTParty.get("#{$escholServer}/oai", query: params,
-                headers: { 'Privileged' => $rt2creds['graphqlApiKey'] })
+    response = HTTParty.get("#{$escholServer}/oai", query: params, headers: { 'Privileged' => $privApiKey })
     content_type response.headers['Content-Type']
     return [response.code, response.body]
   end
