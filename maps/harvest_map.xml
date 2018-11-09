@@ -135,6 +135,9 @@
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" prefix="ark:/13030/" select-using="xpath" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="publication-date">
         <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
       </xwalk:field-mapping>
@@ -238,6 +241,9 @@
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="publication-date">
         <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
       </xwalk:field-mapping>
@@ -326,6 +332,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="publication-date">
         <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
@@ -465,6 +474,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="publish-date">
         <xwalk:field-source from="/item/metadata/published" select-using="xpath" />

@@ -88,6 +88,9 @@
       <xwalk:field-mapping to="requested-embargo.display-name">
         <xwalk:field-source from="requested-embargo.display-name" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="confidential">
+        <xwalk:field-source from="confidential" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="requested-reuse-licence.short-name">
         <xwalk:field-source from="requested-reuse-licence.short-name" />
       </xwalk:field-mapping>
@@ -108,6 +111,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="publisher">
         <xwalk:field-source from="publisher" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publication-status">
+        <xwalk:field-source from="publication-status" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="publication-date">
         <xwalk:field-source from="publication-date" />
