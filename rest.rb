@@ -60,6 +60,7 @@ ITEM_FIELDS = %{
   localIDs {
     id
     scheme
+    subScheme
   }
   units {
     id
@@ -377,7 +378,6 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   if offset > 0
     moreToken = $nextMoreToken["#{collection}:#{offset}"]
     doQuery = !moreToken.nil?
-    puts "moreToken=#{moreToken.inspect} doQuery=#{doQuery}"
   else
     moreToken = nil
     doQuery = true
@@ -386,7 +386,7 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   if doQuery
     data = apiQuery("""
       unit(id: $collection) {
-        items(first: $limit, more: $more) {
+        items(first: $limit, include: [EMBARGOED,WITHDRAWN,EMPTY,PUBLISHED], more: $more) {
           more
           nodes {
             #{ITEM_FIELDS}
@@ -552,15 +552,19 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
 end
 
 ###################################################################################################
-get %r{/dspace-rest/bitstreams/(.+)/policy} do |path|
+get %r{/dspace-rest/bitstreams/([^/]+)/(.*)/policy} do |itemID, path|
   content_type "application/atom+xml; type=entry;charset=UTF-8"
+  itemData = apiQuery("item(id: $itemID) { status }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  itemData or errHalt(404, "item #{itemID} not found")
+  puts "itemData=#{itemData}"
+  policyGroup = (itemData['status'] =~ /PUBLISHED|EMPTY/) ? 0 : 9
   [200, xmlGen('''
     <resourcePolicies>
       <resourcepolicy>
         <action>READ</action>
-        <groupId>0</groupId>
-        <id>32</id>
-        <resourceId><%= path %>/</resourceId>
+        <groupId><%= policyGroup %></groupId>
+        <id><%= policyGroup+32 %></id>
+        <resourceId><%= itemID+"/"+path %>/</resourceId>
         <resourceType>bitstream</resourceType>
         <rpType>TYPE_INHERITED</rpType>
       </resourcepolicy>
@@ -568,7 +572,7 @@ get %r{/dspace-rest/bitstreams/(.+)/policy} do |path|
 end
 
 ###################################################################################################
-delete "/dspace-rest/bitstreams/:itemID/:filename/policy/32" do |itemID, filename|
+delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, filename, policyID|
   # After redepositing a file, Elements goes and deletes the policy from the new file.
   # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
   # the item.
@@ -646,7 +650,11 @@ get "/dspace-oai" do
         </ListSets>
       </OAI-PMH>''', binding)
   else
-    params['verb'] == 'ListIdentifiers' and params.delete('from') # Disable differential harvest for now
+    if params['verb'] == 'ListIdentifiers' && !params['resumptionToken']
+      # For now, defeat differential harvest. Instead, just return identifiers in the 'jtest' set
+      params.delete('from')
+      params['set'] = 'jtest'
+    end
 
     # Proxy the OAI query over to the eschol API server, and return its results
     response = HTTParty.get("#{$escholServer}/oai", query: params, headers: { 'Privileged' => $privApiKey })

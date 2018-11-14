@@ -73,11 +73,13 @@ def fetchAndProcess(url)
 
   #puts "    pub #{pubID}"
 
+  #puts pubEl.to_xml
+
   recordIDs = {}
   pubEl.xpath("records/record[@format='native']").each { |record|
     addID(recordIDs, record['source-name'], record['id-at-source'])
     record.xpath(".//field").each { |field|
-      field['name'] =~ /^c-/ and addID(recordIDs, field['name'], field.at('text').text)
+      field['name'] =~ /^c-|^doi$/ and addID(recordIDs, field['name'], field.at('text').text)
     }
   }
 
