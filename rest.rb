@@ -125,8 +125,8 @@ class XMLGen < Erubis::Eruby
 end
 
 #################################################################################################
-# Send a GraphQL query to the eschol API, returning the JSON results.
-def apiQuery(query, vars = {}, privileged = false)
+# Send a GraphQL query to the eschol access API, returning the JSON results.
+def accessAPIQuery(query, vars = {}, privileged = false)
   if vars.empty?
     query = "query { #{query} }"
   else
@@ -139,7 +139,24 @@ def apiQuery(query, vars = {}, privileged = false)
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
+  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code}")
   response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
+  response['data']
+end
+
+#################################################################################################
+# Send a mutation to the submission API, returning the JSON results.
+def submitAPIMutation(mutation, vars)
+  query = "mutation(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{mutation} }"
+  varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
+  headers = { 'Content-Type' => 'application/json' }
+  headers['Privileged'] = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
+  response = HTTParty.post("#{$escholServer}/graphql",
+               :headers => headers,
+               :body => { variables: varHash, query: query }.to_json)
+  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code}")
+  response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
+  puts "response=#{response.inspect}"
   response['data']
 end
 
@@ -186,7 +203,6 @@ end
 ###################################################################################################
 post "/dspace-rest/login" do
   content_type "text/plain;charset=utf-8"
-  puts "expecting email #{$rt2Email.inspect} and pw #{$rt2Password.inspect}"
   params['email'] == $rt2Email && params['password'] == $rt2Password or halt(401, "Unauthorized.\n")
   $sessions[getSession][:loggedIn] = true
   puts "==> Login ok, setting flag on session."
@@ -204,7 +220,7 @@ get "/dspace-rest/collections" do
   verifyLoggedIn
   content_type "text/xml"
   inner = %w{cdl_rw iis_general jtest root}.map { |unitID|
-    data = apiQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
+    data = accessAPIQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
     xmlGen('''
       <collection>
         <link>/rest/collections/13030/<%= unitID %></link>
@@ -359,7 +375,7 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
   content_type "text/xml"
-  data = apiQuery("item(id: $itemID) { #{ITEM_FIELDS} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  data = accessAPIQuery("item(id: $itemID) { #{ITEM_FIELDS} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
   data or halt(404)
   return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + formatItemData(data, params['expand'])
 end
@@ -384,7 +400,7 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   end
 
   if doQuery
-    data = apiQuery("""
+    data = accessAPIQuery("""
       unit(id: $collection) {
         items(first: $limit, include: [EMBARGOED,WITHDRAWN,EMPTY,PUBLISHED], more: $more) {
           more
@@ -442,8 +458,10 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   # no metadata so that would not be reasonable.
   request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
 
-  # Make an eschol ARK for this pub (if we've seen the pub before, the same old ark will be returned)
-  ark = mintArk(guid)
+  # Make a privisional eschol ARK for this pub
+  ark = submitAPIMutation("mintProvisionalID(input: $input) { id }", { input: ["MintProvisionalIDInput!",
+    { sourceName: "elements", sourceID: guid }] }).dig("mintProvisionalID", "id")
+  ark =~ %r<^ark:/?13030/qt\w{8}$> or raise("bad result #{ark.inspect} from mintProvisionalID")
 
   # Return a customized XML response.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
@@ -517,6 +535,7 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
 end
 
 ###################################################################################################
+# e.g. POST /rest/items/qt12345678/bitstreams?name=anvlspec.pdf&description=Accepted%20version
 post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   shortArk =~ /^qt\w{8}$/ or raise("invalid ARK")
 
@@ -530,8 +549,6 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     request.body.rewind
     outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
 
-    # POST /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/bitstreams?name=anvlspec.pdf&description=Accepted%20version
-    # TODO - customize raw response
     xmlGen('''
       <bitstream>
         <link>/rest/bitstreams/<%=shortArk%>/<%=CGI.escape(fileName)%></link>
@@ -554,9 +571,8 @@ end
 ###################################################################################################
 get %r{/dspace-rest/bitstreams/([^/]+)/(.*)/policy} do |itemID, path|
   content_type "application/atom+xml; type=entry;charset=UTF-8"
-  itemData = apiQuery("item(id: $itemID) { status }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  itemData = accessAPIQuery("item(id: $itemID) { status }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
   itemData or errHalt(404, "item #{itemID} not found")
-  puts "itemData=#{itemData}"
   policyGroup = (itemData['status'] =~ /PUBLISHED|EMPTY/) ? 0 : 9
   [200, xmlGen('''
     <resourcePolicies>

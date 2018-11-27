@@ -4,6 +4,7 @@ config/
 gems/
 logs/
 node_modules/
+old/
 tools/cache*
 tmp/
 .DS_Store
