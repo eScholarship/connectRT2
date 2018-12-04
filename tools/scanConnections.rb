@@ -174,6 +174,7 @@ def scanPubs
     ((idx % 100) == 1) and puts "Processing pub #{idx} of #{arkToPub.size}."
     next if $pubInfo.key?(pub)
     next if pub.include?("merged:")
+    next if pub.include?("abc123")
     fetchAndProcess("#{$apiHost}/publications/#{pub}")
   }
   puts "Done processing pubs."

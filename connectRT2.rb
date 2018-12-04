@@ -25,7 +25,6 @@ require 'pp'
 require 'sinatra'
 require 'time'
 require_relative "./rest.rb"
-require_relative "./deposit.rb"
 
 # Flush stdout after each write
 STDOUT.sync = true

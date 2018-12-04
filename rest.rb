@@ -6,6 +6,11 @@ require 'erubis'
 require 'securerandom'
 require 'xmlsimple'
 
+require "#{$espylib}/ark.rb"     # for normalizeArk
+require "#{$espylib}/xmlutil.rb" # for text_at
+
+require_relative './transform.rb'
+
 $jscholKey = ENV['JSCHOL_KEY'] or raise("missing env JSCHOL_KEY")
 
 $sessions = {}
@@ -458,7 +463,7 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   # no metadata so that would not be reasonable.
   request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
 
-  # Make a privisional eschol ARK for this pub
+  # Make a provisional eschol ARK for this pub
   ark = submitAPIMutation("mintProvisionalID(input: $input) { id }", { input: ["MintProvisionalIDInput!",
     { sourceName: "elements", sourceID: guid }] }).dig("mintProvisionalID", "id")
   ark =~ %r<^ark:/?13030/qt\w{8}$> or raise("bad result #{ark.inspect} from mintProvisionalID")
@@ -485,53 +490,45 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
 end
 
 ###################################################################################################
+# e.g. PUT /rest/items/qt12345678/metadata
+# with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
+#                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
 put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # The ID should be an ARK, obtained earlier from the Sword post.
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
-  destroyOnFail(itemID) { # clean up after ourselves if anything goes wrong
 
-    # PUT /rest/items/4463d757-868a-42e2-9aab-edc560089ca1/metadata
-    # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
-    #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
-    #                            ...
+  # The only reason to send this, we think, is to omit the In-Progress header, telling us to
+  # publish the item.
+  request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
 
 
-    # Grab the body. It should be an XML set of metadata entries.
-    request.body.rewind
-    body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
-    puts "dspaceMetaPut: body=#{body.to_xml}"
+  # Grab the body. It should be an XML set of metadata entries.
+  request.body.rewind
+  body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
+  puts "dspaceMetaPut: body=#{body.to_xml}"
 
-    # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
-    # we created in the earlier sword post.
-    pubID = who = nil
-    body.xpath(".//metadataentry").each { |ent|
-      ent.text_at("key") == "elements-pub-id" and pubID = ent.text_at("value")
-      ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
-    }
-    pubID or raise("Can't find elements-pub-id in feed")
-    who or raise("Can't find depositor-email in feed")
-
-    puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
-    $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
-    $recentArkInfo[itemID] = { pubID: pubID, who: who }
-
-    # Make sure it hasn't already been deposited (would indicate that somehow Elements didn't
-    # record the connection)
-    if $arkDb.get_first_value("SELECT external_id FROM arks WHERE source='elements' AND external_id=?", pubID)
-      userErrorHalt(itemID, "This publication was already deposited.")
-    end
-
-    # Now that we have a real pub ID, record it in the ark database.
-    $arkDb.execute("UPDATE arks SET external_id=? WHERE source=? AND id=?",
-      [pubID, 'elements', normalizeArk(itemID).sub("ark:/", "ark:")])
-
-    # Update the metadata on disk
-    checkForMetaUpdate(nil, "ark:/13030/#{itemID}", body, DateTime.now)
-
-    # All done.
-    content_type "text/plain"
-    nil  # content length zero, and HTTP 200 OK
+  # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
+  # we created in the earlier sword post.
+  pubID = who = nil
+  body.xpath(".//metadataentry").each { |ent|
+    ent.text_at("key") == "elements-pub-id" and pubID = ent.text_at("value")
+    ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
   }
+  pubID or raise("Can't find elements-pub-id in feed")
+  who or raise("Can't find depositor-email in feed")
+  puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
+
+  # Translate the metadata from Elements' dspace format to eSchol's json format
+  jsonMeta = elementsToJSON({}, body, "ark:/13030/#{itemID}")
+  puts "jsonMeta="; pp jsonMeta
+
+  # And record all of it for the commit which will come later
+  $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
+  $recentArkInfo[itemID] = { pubID: pubID, who: who, meta: jsonMeta, files: [] }
+
+  # All done.
+  content_type "text/plain"
+  nil  # content length zero, and HTTP 200 OK
 end
 
 ###################################################################################################
@@ -539,33 +536,30 @@ end
 post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   shortArk =~ /^qt\w{8}$/ or raise("invalid ARK")
 
-  destroyOnFail(shortArk) { # clean up after ourselves if anything goes wrong
+  content_type "text/xml"
 
-    content_type "text/xml"
+  fileName = params['name'] or raise("missing 'name' param")
+  fileVersion = params['description']  # will be missing if user chose '[None]'
 
-    fileName = params['name'] or raise("missing 'name' param")
-    fileVersion = params['description']  # will be missing if user chose '[None]'
+  request.body.rewind
+  outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
 
-    request.body.rewind
-    outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
-
-    xmlGen('''
-      <bitstream>
-        <link>/rest/bitstreams/<%=shortArk%>/<%=CGI.escape(fileName)%></link>
-        <expand>parent</expand>
-        <expand>policies</expand>
-        <expand>all</expand>
-        <name><%=outFilename%></name>
-        <type>bitstream</type>
-        <UUID><%=shortArk%>/<%=CGI.escape(outFilename)%></UUID>
-        <bundleName>ORIGINAL</bundleName>
-        <description><%=fileVersion%></description>
-        <mimeType><%=mimeType%></mimeType>
-        <retrieveLink>/foo/bar</retrieveLink>
-        <sequenceId>-1</sequenceId>
-        <sizeBytes><%=size%></sizeBytes>
-      </bitstream>''', binding)
-  }
+  xmlGen('''
+    <bitstream>
+      <link>/rest/bitstreams/<%=shortArk%>/<%=CGI.escape(fileName)%></link>
+      <expand>parent</expand>
+      <expand>policies</expand>
+      <expand>all</expand>
+      <name><%=outFilename%></name>
+      <type>bitstream</type>
+      <UUID><%=shortArk%>/<%=CGI.escape(outFilename)%></UUID>
+      <bundleName>ORIGINAL</bundleName>
+      <description><%=fileVersion%></description>
+      <mimeType><%=mimeType%></mimeType>
+      <retrieveLink>/foo/bar</retrieveLink>
+      <sequenceId>-1</sequenceId>
+      <sizeBytes><%=size%></sizeBytes>
+    </bitstream>''', binding)
 end
 
 ###################################################################################################
@@ -612,27 +606,25 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
 
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
 
-  destroyOnFail(itemID) { # clean up after ourselves if anything goes wrong
+  # The only reason to send this, we think, is to omit the In-Progress header, telling us to
+  # publish the item.
+  request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
 
-    # The only reason to send this, we think, is to omit the In-Progress header, telling us to
-    # publish the item.
-    request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
+  request.body.rewind
+  request.body.read.strip == "" or errHalt(400, "don't know what to do with actual edit data")
 
-    request.body.rewind
-    request.body.read.strip == "" or errHalt(400, "don't know what to do with actual edit data")
+  # Time to publish this thing.
+  userErrorHalt(itemID, "FIXME: finish publish code")
+  info = $recentArkInfo[itemID]
+  if info
+    approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
+  else
+    approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
+  end
 
-    # Time to publish this thing.
-    info = $recentArkInfo[itemID]
-    if info
-      approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
-    else
-      approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
-    end
-
-    # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
-    content_type "application/atom+xml; type=entry;charset=UTF-8"
-    [200, xmlGen('''<entry xmlns="http://www.w3.org/2005/Atom" />''', binding, xml_header: false)]
-  }
+  # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
+  content_type "application/atom+xml; type=entry;charset=UTF-8"
+  [200, xmlGen('''<entry xmlns="http://www.w3.org/2005/Atom" />''', binding, xml_header: false)]
 end
 
 ###################################################################################################
@@ -681,9 +673,6 @@ end
 
 ###################################################################################################
 def arkToPubID(ark)
-  pubID = $arkDb.get_first_value("SELECT external_id FROM arks WHERE source='elements' AND id=?",
-                                 normalizeArk(ark))
-  pubID && pubID =~ /^\d+$/ and return pubID
   return ($recentArkInfo[getShortArk(ark)] || {})[:pubID]
 end
 

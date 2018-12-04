@@ -165,9 +165,6 @@ open("arkToPub.txt", "w") { |io|
   }
 }
 
-puts "Wrote arkToPub.txt, exiting early."
-exit 1
-
 pubMain.to_a.sort.each { |k, v|
   puts "size pubMain[#{k}] = #{pubMain[k].size}"
   puts "  #{pubMain[k].sort{|a,b| Zlib::crc32(a) <=> Zlib::crc32(b)}[0..9].join(" ")}"
