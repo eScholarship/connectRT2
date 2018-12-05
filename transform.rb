@@ -54,7 +54,7 @@ end
 ###################################################################################################
 def convertPubType(pubTypeStr)
   case pubTypeStr
-    when %r{^(journal-article|conference|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'PAPER'
+    when %r{^(journal-article|conference|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'ARTICLE'
     when %r{^(dataset|poster|media|presentation|other)$}; 'NON_TEXTUAL'
     when "book"; 'MONOGRAPH'
     when "chapter"; 'CHAPTER'
@@ -267,7 +267,7 @@ end
 ###################################################################################################
 # Take feed XML from Elements and make an eschol JSON record out of it. Note that if you pass
 # existing eschol data in, it will be retained if Elements doesn't override it.
-def elementsToJSON(oldData, feed, ark, fileVersion = nil)
+def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
 
   # Parse out the flat list of metadata from the feed into a handy hash
   metaHash = parseMetadataEntries(feed)
@@ -285,8 +285,8 @@ def elementsToJSON(oldData, feed, ark, fileVersion = nil)
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   data[:type] = convertPubType(elementsPubType)
-  data[:isPeerReviewed] = data[:isPeerReviewed] || 'yes'
-  data[:pubStatus] = convertPubStatus(metaHash.delete('publication-status'))
+  # TODO: data[:isPeerReviewed] = data[:isPeerReviewed] || 'yes'
+  # TODO: data[:pubStatus] = convertPubStatus(metaHash.delete('publication-status'))
   # TODO: add fileVersion to submit and access APIs
   #(fileVersion && fileVersion != 'Supporting information') and data[:contentVersion] = convertFileVersion(fileVersion)
   data[:embargoExpires] = assignEmbargo(metaHash, data)
@@ -323,6 +323,7 @@ def elementsToJSON(oldData, feed, ark, fileVersion = nil)
 
   # History
   data[:published] = convertPubDate(metaHash.delete('publication-date'))
+  data[:submitterEmail] = who
 
   # All done.
   return data

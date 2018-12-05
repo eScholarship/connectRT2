@@ -4,6 +4,7 @@ require 'cgi'
 require 'digest'
 require 'erubis'
 require 'securerandom'
+require 'uri'
 require 'xmlsimple'
 
 require "#{$espylib}/ark.rb"     # for normalizeArk
@@ -145,8 +146,12 @@ def accessAPIQuery(query, vars = {}, privileged = false)
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
   response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code}")
-  response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
-  response['data']
+  if response['errors']
+    puts "Full error text:"
+    pp response['errors']
+    raise("Internal error (graphql): #{response['errors'][0]['message']}")
+  end
+  return response['data']
 end
 
 #################################################################################################
@@ -159,10 +164,13 @@ def submitAPIMutation(mutation, vars)
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
-  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code}")
-  response['errors'] and raise("Internal error (graphql): #{response['errors'][0]['message']}")
-  puts "response=#{response.inspect}"
-  response['data']
+  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code} - #{response.message[0,120]}")
+  if response['errors']
+    puts "Full error text:"
+    pp response['errors']
+    raise("Internal error (graphql): #{response['errors'][0]['message']}")
+  end
+  return response['data']
 end
 
 ###################################################################################################
@@ -181,6 +189,16 @@ def getSession
   headers 'Set-Cookie' => "JSESSIONID=#{session}; Path=/dspace-rest"
   puts "Created new session: #{session}"
   return session
+end
+
+###################################################################################################
+def approveItem(ark, info)
+  ark =~ /^qt\w{8}$/ or raise("invalid ark")
+  #$recentArkInfo[itemID] = { pubID: pubID, who: who, meta: jsonMeta, files: [] }
+  # Cute way to check for valid email addr - built in to Ruby.
+  info && info[:who] =~ URI::MailTo::EMAIL_REGEXP && info[:meta] or raise("missing data")
+  outID = submitAPIMutation("putItem(input: $input) { id }", { input: ["PutItemInput!", info[:meta]] }).dig("putItem", "id")
+  outID.include?(ark) or raise("putItem didn't work right")
 end
 
 ###################################################################################################
@@ -515,11 +533,11 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
     ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
   }
   pubID or raise("Can't find elements-pub-id in feed")
-  who or raise("Can't find depositor-email in feed")
+  who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
 
   # Translate the metadata from Elements' dspace format to eSchol's json format
-  jsonMeta = elementsToJSON({}, body, "ark:/13030/#{itemID}")
+  jsonMeta = elementsToJSON({}, who, body, "ark:/13030/#{itemID}")
   puts "jsonMeta="; pp jsonMeta
 
   # And record all of it for the commit which will come later
@@ -587,6 +605,7 @@ delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, 
   # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
   # the item.
 
+  userErrorHalt("FIXME: redeposit logic")  # FIXME
   if isPublished(itemID) && isPending(itemID)
     info = $recentArkInfo[itemID]
     if info
@@ -614,13 +633,8 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
   request.body.read.strip == "" or errHalt(400, "don't know what to do with actual edit data")
 
   # Time to publish this thing.
-  userErrorHalt(itemID, "FIXME: finish publish code")
-  info = $recentArkInfo[itemID]
-  if info
-    approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
-  else
-    approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
-  end
+  info = $recentArkInfo[itemID] or errHalt(400, "data has expired")
+  approveItem(itemID, info)
 
   # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
