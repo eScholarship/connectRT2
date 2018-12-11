@@ -576,9 +576,12 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
 
   info = $recentArkInfo[shortArk] or raise("expecting bitstream only after metadata post")
 
-  # Generate a secure name and put the file in a URL-accessible place.
+  # Generate a secure but somewhat meaningful name
   request.body.rewind
-  tmpFile = "#{SecureRandom.hex(20)}.dat"
+  safeName = fileName.gsub(/[^A-Za-z0-9_.]/, '')
+  tmpFile = "#{File.basename(safeName,'.*')[0,20]}__#{SecureRandom.hex(20)}.#{File.extname(safeName)[0,5]}"
+
+  # Put the file in a URL-accessible place.
   tmpPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{tmpFile}"
   open(tmpPath, "w") { |out| FileUtils.copy_stream(request.body, out) }
   size = File.size(tmpPath)
@@ -597,6 +600,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
       userErrorHalt(ark, "Only PDF and Word docs are acceptable for the main content.")
     end
     info[:meta][:contentLink] = "#{$submitServer}/bitstreamTmp/#{tmpFile}"
+    info[:meta][:contentFileName] = fileName
     info[:meta][:contentVersion] = case fileVersion
       when /(Accepted|Submitted) version/; 'AUTHOR_VERSION'
       when "Published version"; 'PUBLISHER_VERSION'
