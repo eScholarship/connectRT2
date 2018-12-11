@@ -285,7 +285,7 @@ def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   data[:type] = convertPubType(elementsPubType)
-  # TODO: data[:isPeerReviewed] = data[:isPeerReviewed] || 'yes'
+  data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
   # TODO: data[:pubStatus] = convertPubStatus(metaHash.delete('publication-status'))
   # TODO: add fileVersion to submit and access APIs
   #(fileVersion && fileVersion != 'Supporting information') and data[:contentVersion] = convertFileVersion(fileVersion)

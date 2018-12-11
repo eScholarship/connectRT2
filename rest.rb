@@ -550,6 +550,21 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
 end
 
 ###################################################################################################
+def guessMimeType(filePath)
+  Rack::Mime.mime_type(File.extname(filePath))
+end
+
+###################################################################################################
+def isPDF(mimeType)
+  return mimeType == "application/pdf"
+end
+
+###################################################################################################
+def isWordDoc(mimeType)
+  return mimeType =~ %r{application/(msword|rtf|vnd.openxmlformats-officedocument.wordprocessingml.document)}
+end
+
+###################################################################################################
 # e.g. POST /rest/items/qt12345678/bitstreams?name=anvlspec.pdf&description=Accepted%20version
 post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   shortArk =~ /^qt\w{8}$/ or raise("invalid ARK")
@@ -557,10 +572,37 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   content_type "text/xml"
 
   fileName = params['name'] or raise("missing 'name' param")
-  fileVersion = params['description']  # will be missing if user chose '[None]'
+  fileVersion = params['description'] or userErrorHalt(ark, "You must choose a 'File version'.")
 
+  info = $recentArkInfo[shortArk] or raise("expecting bitstream only after metadata post")
+
+  # Generate a secure name and put the file in a URL-accessible place.
   request.body.rewind
-  outFilename, size, mimeType = depositFile("ark:/13030/#{shortArk}", fileName, fileVersion, request.body)
+  tmpFile = "#{SecureRandom.hex(20)}.dat"
+  tmpPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{tmpFile}"
+  open(tmpPath, "w") { |out| FileUtils.copy_stream(request.body, out) }
+  size = File.size(tmpPath)
+  info[:files] << tmpPath
+
+  # Now stuff it into the metadata
+  mimeType = guessMimeType(fileName)
+  if fileVersion == "Supporting information"
+    # Supplemental file(s)
+    info[:meta][:suppFiles] ||= []
+    info[:meta][:suppFiles] << { file: fileName, contentType: mimeType, size: size,
+                          fetchLink: "#{$submitServer}/bitstreamTmp/#{tmpFile}" }
+  else
+    # Main content file
+    if !isPDF(mimeType) && !isWordDoc(mimeType)
+      userErrorHalt(ark, "Only PDF and Word docs are acceptable for the main content.")
+    end
+    info[:meta][:contentLink] = "#{$submitServer}/bitstreamTmp/#{tmpFile}"
+    info[:meta][:contentVersion] = case fileVersion
+      when /(Accepted|Submitted) version/; 'AUTHOR_VERSION'
+      when "Published version"; 'PUBLISHER_VERSION'
+      else raise("unrecognized fileVersion #{fileVersion.inspect}")
+    end
+  end
 
   xmlGen('''
     <bitstream>
@@ -568,9 +610,9 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
       <expand>parent</expand>
       <expand>policies</expand>
       <expand>all</expand>
-      <name><%=outFilename%></name>
+      <name><%=fileName%></name>
       <type>bitstream</type>
-      <UUID><%=shortArk%>/<%=CGI.escape(outFilename)%></UUID>
+      <UUID><%=shortArk%>/<%=CGI.escape(fileName)%></UUID>
       <bundleName>ORIGINAL</bundleName>
       <description><%=fileVersion%></description>
       <mimeType><%=mimeType%></mimeType>
