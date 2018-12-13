@@ -192,13 +192,27 @@ def getSession
 end
 
 ###################################################################################################
-def approveItem(ark, info)
+def approveItem(ark, info, replaceOnlyFiles)
   ark =~ /^qt\w{8}$/ or raise("invalid ark")
-  #$recentArkInfo[itemID] = { pubID: pubID, who: who, meta: jsonMeta, files: [] }
-  # Cute way to check for valid email addr - built in to Ruby.
-  info && info[:who] =~ URI::MailTo::EMAIL_REGEXP && info[:meta] or raise("missing data")
-  outID = submitAPIMutation("putItem(input: $input) { id }", { input: ["PutItemInput!", info[:meta]] }).dig("putItem", "id")
-  outID.include?(ark) or raise("putItem didn't work right")
+  info && info[:meta] or raise("missing data")
+
+  # Now run the right API mutation
+  begin
+    if replaceOnlyFiles
+      submitAPIMutation("replaceFiles(input: $input) { message }", { input: ["ReplaceFilesInput!", info[:meta]] })
+    else
+      outID = submitAPIMutation("depositItem(input: $input) { id }",
+                                { input: ["DepositItemInput!", info[:meta]] }).dig("depositItem", "id")
+      outID.include?(ark) or raise("depositItem didn't work right")
+    end
+  ensure
+    # Delete all the old files regardless of whether we succeeded or failed.
+    info[:files].each { |path| File.unlink(path) }
+
+    # Clear old data so it can be re-done if needed
+    info[:meta] = { id: "ark:/13030/#{ark}" }
+    info[:files] = []
+  end
 end
 
 ###################################################################################################
@@ -574,12 +588,17 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   fileName = params['name'] or raise("missing 'name' param")
   fileVersion = params['description'] or userErrorHalt(ark, "You must choose a 'File version'.")
 
-  info = $recentArkInfo[shortArk] or raise("expecting bitstream only after metadata post")
+  info = $recentArkInfo[shortArk]
+  if !info
+    # Re-deposit case
+    $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
+    $recentArkInfo[shortArk] = info = { meta: { id: "ark:/13030/#{shortArk}" }, files: [] }
+  end
 
   # Generate a secure but somewhat meaningful name
   request.body.rewind
   safeName = fileName.gsub(/[^A-Za-z0-9_.]/, '')
-  tmpFile = "#{File.basename(safeName,'.*')[0,20]}__#{SecureRandom.hex(20)}.#{File.extname(safeName)[0,5]}"
+  tmpFile = "#{File.basename(safeName,'.*')[0,20]}__#{SecureRandom.hex(20)}#{File.extname(safeName)[0,5]}"
 
   # Put the file in a URL-accessible place.
   tmpPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{tmpFile}"
@@ -593,11 +612,15 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     # Supplemental file(s)
     info[:meta][:suppFiles] ||= []
     info[:meta][:suppFiles] << { file: fileName, contentType: mimeType, size: size,
-                          fetchLink: "#{$submitServer}/bitstreamTmp/#{tmpFile}" }
+                                 fetchLink: "#{$submitServer}/bitstreamTmp/#{tmpFile}" }
   else
     # Main content file
     if !isPDF(mimeType) && !isWordDoc(mimeType)
-      userErrorHalt(ark, "Only PDF and Word docs are acceptable for the main content.")
+      userErrorHalt(shortArk, "Only PDF and Word docs are acceptable for the main content.")
+    end
+    if info[:meta][:contentLink]
+      userErrorHalt(shortArk, "Only one main file is allowed. \n" +
+        "Set the File Version to 'Supporting Information' for supplemental files.")
     end
     info[:meta][:contentLink] = "#{$submitServer}/bitstreamTmp/#{tmpFile}"
     info[:meta][:contentFileName] = fileName
@@ -651,15 +674,9 @@ delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, 
   # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
   # the item.
 
-  userErrorHalt("FIXME: redeposit logic")  # FIXME
-  if isPublished(itemID) && isPending(itemID)
-    info = $recentArkInfo[itemID]
-    if info
-      approveItem("ark:/13030/#{itemID}", info[:pubID], info[:who], false)
-    else
-      approveItem("ark:/13030/#{itemID}", arkToPubID(itemID), nil, false)
-    end
-  end
+  request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing policy delete")
+  info = $recentArkInfo[itemID] or raise("redeposit without expected file")
+  approveItem(itemID, info, true)  # replaceOnlyFiles=true
 
   # Return a fake response.
   [204, "Deleted."]
@@ -680,7 +697,7 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
 
   # Time to publish this thing.
   info = $recentArkInfo[itemID] or errHalt(400, "data has expired")
-  approveItem(itemID, info)
+  approveItem(itemID, info, false)  # replaceOnlyFiles=false
 
   # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
@@ -733,7 +750,16 @@ end
 
 ###################################################################################################
 def arkToPubID(ark)
-  return ($recentArkInfo[getShortArk(ark)] || {})[:pubID]
+  pubID = ($recentArkInfo[getShortArk(ark)] || {})[:pubID]
+  if !pubID
+    data = accessAPIQuery("item(id: $itemID) { localIDs { id scheme } }",
+                          { itemID: ["ID!", "ark:/13030/#{getShortArk(ark)}"] })['item']
+    if data
+      found = data['localIDs'].select{ |lid| lid['scheme'] == "OA_PUB_ID" }[0]
+      found and pubID = found['id']
+    end
+  end
+  return pubID
 end
 
 ###################################################################################################
