@@ -190,30 +190,28 @@ end
 def convertFunding(metaHash)
   funderNames = metaHash.delete("funder-name").split("|")
   funderIds   = metaHash.delete("funder-reference").split("|")
-  return funderNames.map.with_index { |name, idx| { id: funderIds[idx], name: name } }
+  return funderNames.map.with_index { |name, idx| { reference: funderIds[idx], name: name } }
 end
 
 ###################################################################################################
-def convertOALocation(metaHash, data)
+def convertOALocation(ark, metaHash, data)
   loc = metaHash.delete("oa-location-url")
   if loc =~ %r{ucelinks.cdlib.org}
-    userErrorHalt("The link you provided may not be accessible to readers outside of UC. \n" +
-                  "Please provide a link to an open access version of this article.")
+    userErrorHalt(ark, "The link you provided may not be accessible to readers outside of UC. \n" +
+                       "Please provide a link to an open access version of this article.")
+  end
+  if loc =~ %r{escholarship.org}
+    userErrorHalt(ark, "The link you provided is to an existing eScholarship item. \n" +
+                       "There is no need to re-deposit this item.")
   end
   data[:externalLinks] ||= []
   data[:externalLinks] << loc
 end
 
 ###################################################################################################
-def assignEmbargo(oldData, metaHash)
+def assignEmbargo(metaHash)
   reqPeriod = metaHash.delete("requested-embargo.display-name")
-
-  if oldData[:embargoExpires] && oldData[:source] == 'subi'
-    # Do not allow embargo of published item to be overridden. Why? Because say somebody edits a
-    # record from Subi using Elements -- they may not be aware there was an embargo, and Elements
-    # would blithely un-embargo it.
-    oldData[:embargoExpires]
-  elsif metaHash.delete("confidential") == "true"
+  if metaHash.delete("confidential") == "true"
     return '2999-12-31' # this should be long enough to count as indefinite
   else
     case reqPeriod
@@ -222,9 +220,7 @@ def assignEmbargo(oldData, metaHash)
       when /Indefinite/
         return '2999-12-31' # this should be long enough to count as indefinite
       when /^(\d+) month(s?)/
-        history = uci.at 'history'
-        baseDate = oldData[:published] ? oldData[:published] : oldData[:added]
-        return (baseDate >> ($1.to_i)).iso8601
+        return (Date.today >> ($1.to_i)).iso8601
       else
         raise "Unknown embargo period format: '#{reqPeriod}'"
     end
@@ -235,11 +231,11 @@ end
 def convertPubStatus(elementsStatus)
   case elementsStatus
     when /None|Unpublished|Submitted/i
-      'internalPub'
+      'INTERNAL_PUB'
     when /Published/i
-      'externalPub'
+      'EXTERNAL_PUB'
     else
-      'externalAccept'
+      'EXTERNAL_ACCEPT'
   end
 end
 
@@ -267,7 +263,7 @@ end
 ###################################################################################################
 # Take feed XML from Elements and make an eschol JSON record out of it. Note that if you pass
 # existing eschol data in, it will be retained if Elements doesn't override it.
-def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
+def elementsToJSON(oldData, who, feed, ark, feedFile)
 
   # Parse out the flat list of metadata from the feed into a handy hash
   metaHash = parseMetadataEntries(feed)
@@ -280,16 +276,15 @@ def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
   data[:sourceName] = 'elements'
   elemPubID = metaHash.delete('elements-pub-id') || raise("missing pub-id")
   data[:sourceID] = elemPubID
+  data[:sourceFeedLink] = "#{$submitServer}/bitstreamTmp/#{feedFile}"
   data[:localIDs] = [{id: elemPubID, scheme: 'OA_PUB_ID'}]
 
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   data[:type] = convertPubType(elementsPubType)
   data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
-  # TODO: data[:pubStatus] = convertPubStatus(metaHash.delete('publication-status'))
-  # TODO: add fileVersion to submit and access APIs
-  #(fileVersion && fileVersion != 'Supporting information') and data[:contentVersion] = convertFileVersion(fileVersion)
-  data[:embargoExpires] = assignEmbargo(metaHash, data)
+  data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
+  data[:embargoExpires] = assignEmbargo(metaHash)
 
   # Author and editor metadata.
   transformPeople(data, metaHash, 'author')
@@ -303,7 +298,7 @@ def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))
   data[:rights] = metaHash.delete('requested-reuse-licence.short-name')
-  metaHash.key?('funder-name') and convertFunding(metaHash, data)
+  metaHash.key?('funder-name') and data[:grants] = convertFunding(metaHash)
 
   # Context
   assignSeries(data, getCompletionDate(data, metaHash), metaHash)
@@ -318,7 +313,7 @@ def elementsToJSON(oldData, who, feed, ark, fileVersion = nil)
   metaHash.key?("volume") and data[:volume] = metaHash.delete("volume")
   metaHash.key?("issue") and data[:issue] = metaHash.delete("issue")
   metaHash.key?("parent-title") and data[:bookTitle] = metaHash.delete("parent-title")  # for chapters
-  metaHash.key?("oa-location-url") and convertOALocation(metaHash, data)
+  metaHash.key?("oa-location-url") and convertOALocation(ark, metaHash, data)
   data[:ucpmsPubType] = elementsPubType
 
   # History

@@ -145,7 +145,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
-  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code}")
+  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code} - #{response.message[0,120]}")
   if response['errors']
     puts "Full error text:"
     pp response['errors']
@@ -163,7 +163,7 @@ def submitAPIMutation(mutation, vars)
   headers['Privileged'] = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
-               :body => { variables: varHash, query: query }.to_json)
+               :body => { variables: varHash, query: query }.to_json.gsub("%", "%25"))
   response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code} - #{response.message[0,120]}")
   if response['errors']
     puts "Full error text:"
@@ -192,9 +192,37 @@ def getSession
 end
 
 ###################################################################################################
+# We only allow Elements to overwrite certain types of eSchol items.
+def checkOverwriteOK(shortArk)
+  data = accessAPIQuery("item(id: $itemID) { source units{ id } }",
+    { itemID: ["ID!", "ark:/13030/#{shortArk}"] }).dig("item")
+
+  # New items are definitely ok
+  data or return
+
+  # Fine for Elements to overwrite its own items
+  data['source'] == 'oa_harvester' and return
+
+  # Things that didn't come from Subi or bepress (such as springer or ETDs) can't be considered
+  # campus postprints. So they can't be modified.
+  data['source'] == 'ojs' and userErrorHalt(shortArk, "Cannot modify items from eScholarship-hosted journals.")
+  data['source'] =~ /^(subi|repo)$/ or userErrorHalt(shortArk, "Cannot modify items imported from external systems.")
+
+  # Campus postprints are ok
+  if data['units'].all? { |unitID| unitID =~ /^uc\w\w?$/ }
+    return
+  else
+    userErrorHalt(shortArk, "Can only modify campus postprints.")
+  end
+end
+
+###################################################################################################
 def approveItem(ark, info, replaceOnlyFiles)
   ark =~ /^qt\w{8}$/ or raise("invalid ark")
   info && info[:meta] or raise("missing data")
+
+  # We don't allow editing of non-campus postprints, among other things.
+  checkOverwriteOK(ark)
 
   # Now run the right API mutation
   begin
@@ -539,6 +567,11 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
   puts "dspaceMetaPut: body=#{body.to_xml}"
 
+  # Store the metadata feed in a URL-accessible place.
+  feedFile = "feed__#{SecureRandom.hex(20)}.xml"
+  feedPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{feedFile}"
+  open(feedPath, "w") { |out| out.write(body.to_xml(indent: 3)) }
+
   # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
   # we created in the earlier sword post.
   pubID = who = nil
@@ -550,13 +583,16 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
 
+  $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
+  $recentArkInfo[itemID] = { pubID: pubID, who: who }
+
   # Translate the metadata from Elements' dspace format to eSchol's json format
-  jsonMeta = elementsToJSON({}, who, body, "ark:/13030/#{itemID}")
+  jsonMeta = elementsToJSON({}, who, body, "ark:/13030/#{itemID}", feedFile)
   puts "jsonMeta="; pp jsonMeta
 
   # And record all of it for the commit which will come later
-  $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
-  $recentArkInfo[itemID] = { pubID: pubID, who: who, meta: jsonMeta, files: [] }
+  $recentArkInfo[itemID][:meta] = jsonMeta
+  $recentArkInfo[itemID][:files] = [feedPath]
 
   # All done.
   content_type "text/plain"
@@ -586,7 +622,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   content_type "text/xml"
 
   fileName = params['name'] or raise("missing 'name' param")
-  fileVersion = params['description'] or userErrorHalt(ark, "You must choose a 'File version'.")
+  fileVersion = params['description'] or userErrorHalt(shortArk, "You must choose a 'File version'.")
 
   info = $recentArkInfo[shortArk]
   if !info
@@ -750,7 +786,10 @@ end
 
 ###################################################################################################
 def arkToPubID(ark)
+  # First, try recent ark info
   pubID = ($recentArkInfo[getShortArk(ark)] || {})[:pubID]
+
+  # Failing that, try the eschol5 API
   if !pubID
     data = accessAPIQuery("item(id: $itemID) { localIDs { id scheme } }",
                           { itemID: ["ID!", "ark:/13030/#{getShortArk(ark)}"] })['item']
@@ -759,6 +798,20 @@ def arkToPubID(ark)
       found and pubID = found['id']
     end
   end
+
+  # Last chance, try the Elements API
+  if !pubID
+    elementsApiHost = ENV['ELEMENTS_API_URL'] || raise("missing env ELEMENTS_API_URL")
+    resp = HTTParty.get("#{elementsApiHost}/publication/records/dspace/#{getShortArk(ark)}", :basic_auth =>
+      { :username => ENV['ELEMENTS_API_USERNAME'] || raise("missing env ELEMENTS_API_USERNAME"),
+        :password => ENV['ELEMENTS_API_PASSWORD'] || raise("missing env ELEMENTS_API_PASSWORD") })
+    if resp.code == 200
+      data = Nokogiri::XML(resp.body).remove_namespaces!
+      pubID = data.xpath("//object[@category='publication']").map{ |r| r['id'] }.compact[0]
+    end
+  end
+
+  # That's it.
   return pubID
 end
 
