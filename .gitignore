@@ -4,9 +4,12 @@ config/
 gems/
 logs/
 node_modules/
+old/
+tools/cache*
 tmp/
 .DS_Store
 *.log
+*.old
 *.out
-*.sql_log
 *.pid
+*.sql_log
