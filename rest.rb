@@ -284,7 +284,7 @@ end
 get "/dspace-rest/collections" do
   verifyLoggedIn
   content_type "text/xml"
-  inner = %w{cdl_rw iis_general jtest root}.map { |unitID|
+  inner = %w{cdl_rw iis_general root}.map { |unitID|
     data = accessAPIQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
     xmlGen('''
       <collection>
@@ -449,7 +449,7 @@ end
 get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
   verifyLoggedIn
 
-  collection =~ /^(cdl_rw|iis_general|jtest|root)$/ or halt(404, "Invalid collection")
+  collection =~ /^(cdl_rw|iis_general|root)$/ or halt(404, "Invalid collection")
 
   offset = (params['offset'] || 0).to_i
 
@@ -761,22 +761,12 @@ get "/dspace-oai" do
             <setName>iis_general</setName>
           </set>
           <set>
-            <setSpec>jtest</setSpec>
-            <setName>jtest</setName>
-          </set>
-          <set>
             <setSpec>root</setSpec>
             <setName>root</setName>
           </set>
         </ListSets>
       </OAI-PMH>''', binding)
   else
-    if params['verb'] == 'ListIdentifiers' && !params['resumptionToken']
-      # For now, defeat differential harvest. Instead, just return identifiers in the 'jtest' set
-      params.delete('from')
-      params['set'] = 'jtest'
-    end
-
     # Proxy the OAI query over to the eschol API server, and return its results
     response = HTTParty.get("#{$escholServer}/oai", query: params, headers: { 'Privileged' => $privApiKey })
     content_type response.headers['Content-Type']

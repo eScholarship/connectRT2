@@ -221,7 +221,7 @@ File.open("drop.csv", "w") { |io|
       else                    "irrel"
     end
     dropClassCounts[dropClass] += 1
-    oldArks.size <= 2 or raise
+    #oldArks.size <= 2 or raise
     io.print("#{pubURL(pubID, oldExt)}\t#{oldAuth}\t#{oldSugg}\t" +
              "#{arkURL(oldArks[0])}\t#{arkURL(oldArks[1])}\t#{dropClass}\t")
     if newPubs
