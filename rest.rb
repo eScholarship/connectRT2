@@ -146,7 +146,9 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
-  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code} - #{response.message[0,120]}")
+  response.code != 200 and raise("Internal error (graphql): " +
+     "HTTP code #{response.code} - #{response.message}.\n" +
+     "#{response.body}")
   if response['errors']
     puts "Full error text:"
     pp response['errors']
@@ -165,7 +167,9 @@ def submitAPIMutation(mutation, vars)
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json.gsub("%", "%25"))
-  response.code != 200 and raise("Internal error (graphql): HTTP code #{response.code} - #{response.message[0,120]}")
+  response.code != 200 and raise("Internal error (graphql): " +
+     "HTTP code #{response.code} - #{response.message}.\n" +
+     "#{response.body}")
   if response['errors']
     puts "Full error text:"
     pp response['errors']
