@@ -4,6 +4,7 @@ require 'cgi'
 require 'digest'
 require 'erubis'
 require 'securerandom'
+require 'unindent'
 require 'uri'
 require 'xmlsimple'
 
@@ -212,7 +213,11 @@ def checkOverwriteOK(shortArk)
   if data['units'].all? { |unitID| unitID =~ /^uc\w\w?$/ }
     return
   else
-    userErrorHalt(shortArk, "Can only modify campus postprints.")
+    userErrorHalt(shortArk, """
+      This item is part of a departmental collection <br/>
+      on eScholarship and cannot be modified here. <br/>
+      For more information visit the
+      <a href='https://help.oapolicy.universityofcalifornia.edu'>Help Center</a>.""".unindent)
   end
 end
 
