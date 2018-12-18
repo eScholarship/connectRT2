@@ -1,6 +1,7 @@
 ###################################################################################################
 # Translation logic: Elements flat metadata to eSchol API JSON
 
+require 'date'
 require 'sequel'
 
 ###################################################################################################
@@ -94,6 +95,7 @@ def convertPubDate(pubDate)
     when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
     when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
     when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
+    when nil;                          Date.today.iso8601
     else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
   end
 end
