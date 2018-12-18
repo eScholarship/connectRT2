@@ -20,6 +20,7 @@ $submitServer = ENV['ESCHOL_SUBMIT_URL'] || raise("missing env ESCHOL_SUBMIT_URL
 require 'date'
 require 'httparty'
 require 'json'
+require 'mail'
 require 'nokogiri'
 require 'pp'
 require 'sinatra'
@@ -30,16 +31,55 @@ require_relative "./rest.rb"
 STDOUT.sync = true
 
  # Compress things that can benefit
-use Rack::Deflater,
-  :include => %w{application/javascript text/html text/xml text/css application/json image/svg+xml},
-  :if => lambda { |env, status, headers, body|
-    # advice from https://www.itworld.com/article/2693941/cloud-computing/
-    #               why-it-doesn-t-make-sense-to-gzip-all-content-from-your-web-server.html
-    return headers["Content-Length"].to_i > 1400
-  }
+configure do
+  set show_exceptions: false
+
+  use Rack::Deflater,
+    :include => %w{application/javascript text/html text/xml text/css application/json image/svg+xml},
+    :if => lambda { |env, status, headers, body|
+      # advice from https://www.itworld.com/article/2693941/cloud-computing/
+      #               why-it-doesn-t-make-sense-to-gzip-all-content-from-your-web-server.html
+      return headers["Content-Length"].to_i > 1400
+    }
+end
 
 ###################################################################################################
 # Simple up/down check
 get "/chk" do
   "connectRT2 running\n"
+end
+
+#################################################################################################
+# Error handling - include call stack for upper layers to report
+error 500 do
+  e = env['sinatra.error']
+  puts "Exception URL: #{request.url}"
+  textBody = "Unhandled exception: #{e.message}\n" +
+             "connectRT2 URL: #{request.url}\n" +
+             "connectRT2 backtrace:\n" +
+             "\t#{e.backtrace.join("\n\t")}\n"
+  textBody.gsub! %r{/apps/eschol/.*/gems/([^/]+)}, '...gems/\1/'
+  textBody.gsub! %r{/apps/eschol/}, ''
+  htmlBody = textBody.gsub("\n", "<br/>")
+  mail = Mail.new do
+    from     "eschol@#{`/bin/hostname --fqdn`.strip}"
+    to       "r.c.martin.haye@ucop.edu, kirk.hastings@ucop.edu"
+    subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} RT2 error"
+    text_part do
+      content_type 'text/plain; charset=UTF-8'
+      body         textBody
+    end
+    html_part do
+      content_type 'text/html; charset=UTF-8'
+      body         htmlBody
+    end
+  end
+  begin
+    mail.deliver
+  rescue Exception => e
+    puts "Error processing error email to: #{e}"
+  end
+
+  content_type "text/plain"
+  return "Internal server error"
 end

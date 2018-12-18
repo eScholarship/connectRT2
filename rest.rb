@@ -217,7 +217,20 @@ def checkOverwriteOK(shortArk)
       This item is part of a departmental collection <br/>
       on eScholarship and cannot be modified here. <br/>
       For more information visit the
-      <a href='https://help.oapolicy.universityofcalifornia.edu'>Help Center</a>.""".unindent)
+      <a target='_blank' href='https://help.oapolicy.universityofcalifornia.edu'>Help Center</a>.
+    """.unindent)
+  end
+end
+
+###################################################################################################
+def clearItemFiles(ark)
+  if (info = $recentArkInfo[ark])
+    # Delete all the old files regardless of whether we succeeded or failed.
+    info[:files].each { |path| File.unlink(path) }
+
+    # Clear old data so it can be re-done if needed
+    info[:meta] = { id: "ark:/13030/#{ark}" }
+    info[:files] = []
   end
 end
 
@@ -239,12 +252,7 @@ def approveItem(ark, info, replaceOnlyFiles)
       outID.include?(ark) or raise("depositItem didn't work right")
     end
   ensure
-    # Delete all the old files regardless of whether we succeeded or failed.
-    info[:files].each { |path| File.unlink(path) }
-
-    # Clear old data so it can be re-done if needed
-    info[:meta] = { id: "ark:/13030/#{ark}" }
-    info[:files] = []
+    clearItemFiles(ark)
   end
 end
 
@@ -788,7 +796,7 @@ def arkToPubID(ark)
   if !pubID
     data = accessAPIQuery("item(id: $itemID) { localIDs { id scheme } }",
                           { itemID: ["ID!", "ark:/13030/#{getShortArk(ark)}"] })['item']
-    if data
+    if data && data['localIDs']
       found = data['localIDs'].select{ |lid| lid['scheme'] == "OA_PUB_ID" }[0]
       found and pubID = found['id']
     end
@@ -823,6 +831,7 @@ def userErrorHalt(ark, msg)
   else
     puts "Hmm, couldn't find a pub_id"
   end
+  clearItemFiles(ark)
   errHalt(400, msg)
 end
 
