@@ -146,7 +146,8 @@ def assignSeries(data, completionDate, metaHash)
     # RGPO special logic
     elsif $groupToRGPO[groupID]
       # If completed on or after 2017-01-08, check funding
-      if (completionDate >= Date.new(2017,1,8)) && (metaHash['funder-name'].include?($groupToRGPO[groupID]))
+      if (completionDate >= Date.new(2017,1,8)) && metaHash['funder-name'] &&
+         (metaHash['funder-name'].include?($groupToRGPO[groupID]))
         "#{$groupToRGPO[groupID].downcase}_rw"
       else
         "rgpo_rw"
