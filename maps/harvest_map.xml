@@ -27,6 +27,7 @@
       <xwalk:field name="confidential" type="boolean" />
       <xwalk:field name="confidential-files-reason" type="text" />
       <xwalk:field name="doi" type="doi" />
+      <xwalk:field name="oa-location-url" type="text" />
       <xwalk:field name="edition" type="text" />
       <xwalk:field name="editors" type="person-list" />
       <xwalk:field name="eissn" type="issn" />
@@ -135,6 +136,9 @@
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="c-eschol-id">
         <xwalk:field-source from="/item/metadata/id" prefix="ark:/13030/" select-using="xpath" />
       </xwalk:field-mapping>
@@ -241,6 +245,9 @@
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="c-eschol-id">
         <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
       </xwalk:field-mapping>
@@ -332,6 +339,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="c-eschol-id">
         <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
@@ -474,6 +484,9 @@
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
         <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="c-eschol-id">
         <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
