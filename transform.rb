@@ -293,9 +293,9 @@ def elementsToJSON(oldData, who, feed, ark, feedFile)
   metaHash['authors'] && data[:authors] = transformPeople(metaHash.delete('authors'), nil)
   if metaHash['editors'] || metaHash['advisors']
     contribs = []
-    metaHash['editors'] and contribs += transformPeople(metaHash.delete('editors'), 'EDITOR')
-    metaHash['advisors'] and contribs += transformPeople(metaHash.delete('advisors'), 'ADVISOR')
-    data[:contributors] = contribs
+    metaHash['editors'] and contribs += (transformPeople(metaHash.delete('editors'), 'EDITOR') || [])
+    metaHash['advisors'] and contribs += (transformPeople(metaHash.delete('advisors'), 'ADVISOR') || [])
+    !contribs.empty? and data[:contributors] = contribs
   end
 
   # Other top-level fields
@@ -448,7 +448,6 @@ def transformPeople(pieces, role)
     case field
       when 'start-person'
         person = {}
-        role and person[:role] = role
       when 'lastname'
         person[:nameParts] ||= {}
         person[:nameParts][:lname] = value
@@ -464,7 +463,10 @@ def transformPeople(pieces, role)
       when 'identifier'
         #puts "TODO: Handle identifiers like #{value.inspect}"
       when 'end-person'
-        person.empty? or people << person
+        if !person.empty?
+          role and person[:role] = role
+          people << person
+        end
         person = nil
       when 'address'
         # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
@@ -474,5 +476,5 @@ def transformPeople(pieces, role)
     end
   }
 
-  return people
+  return people.empty? ? nil : people
 end
