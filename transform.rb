@@ -290,8 +290,13 @@ def elementsToJSON(oldData, who, feed, ark, feedFile)
   data[:embargoExpires] = assignEmbargo(metaHash)
 
   # Author and editor metadata.
-  transformPeople(data, metaHash, 'author')
-  transformPeople(data, metaHash, 'editor')
+  metaHash['authors'] && data[:authors] = transformPeople(metaHash.delete('authors'), nil)
+  if metaHash['editors'] || metaHash['advisors']
+    contribs = []
+    metaHash['editors'] and contribs += transformPeople(metaHash.delete('editors'), 'EDITOR')
+    metaHash['advisors'] and contribs += transformPeople(metaHash.delete('advisors'), 'ADVISOR')
+    data[:contributors] = contribs
+  end
 
   # Other top-level fields
   metaHash.key?('title') and data[:title] = metaHash.delete('title')
@@ -432,10 +437,7 @@ def updateMetadata(ark, fileVersion=nil)
 end
 
 ###################################################################################################
-def transformPeople(data, metaHash, authOrEd)
-
-  data.delete("#{authOrEd}s".to_sym)
-  pieces = metaHash.delete("#{authOrEd}s") or return
+def transformPeople(pieces, role)
 
   # Now build the resulting UCI author records.
   people = []
@@ -446,6 +448,7 @@ def transformPeople(data, metaHash, authOrEd)
     case field
       when 'start-person'
         person = {}
+        role and person[:role] = role
       when 'lastname'
         person[:nameParts] ||= {}
         person[:nameParts][:lname] = value
@@ -470,5 +473,6 @@ def transformPeople(data, metaHash, authOrEd)
         raise("Unexpected person field #{field.inspect}")
     end
   }
-  people.empty? or data["#{authOrEd}s".to_sym] = people
+
+  return people
 end
