@@ -60,6 +60,8 @@ error 500 do
              "\t#{e.backtrace.join("\n\t")}\n"
   textBody.gsub! %r{/apps/eschol/.*/gems/([^/]+)}, '...gems/\1/'
   textBody.gsub! %r{/apps/eschol/}, ''
+  textBody.gsub! "<", "&lt;"
+  textBody.gsub! ">", "&gt;"
   htmlBody = textBody.gsub("\n", "<br/>")
   mail = Mail.new do
     from     "eschol@#{`/bin/hostname --fqdn`.strip}"

@@ -143,12 +143,25 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   headers = { 'Content-Type' => 'application/json' }
   privKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
   privileged and headers['Privileged'] = privKey
-  response = HTTParty.post("#{$escholServer}/graphql",
-               :headers => headers,
-               :body => { variables: varHash, query: query }.to_json)
-  response.code != 200 and raise("Internal error (graphql): " +
-     "HTTP code #{response.code} - #{response.message}.\n" +
-     "#{response.body}")
+  begin
+    retries ||= 0
+    response = HTTParty.post("#{$escholServer}/graphql",
+                 :headers => headers,
+                 :body => { variables: varHash, query: query }.to_json)
+    response.code != 200 and raise("Internal error (graphql): " +
+       "HTTP code #{response.code} - #{response.message}.\n" +
+       "#{response.body}")
+  rescue
+    if response && response.code == 500 && response.body.length < 100
+      retries += 1
+      if retries <= 5
+        puts "Empty code 500 response. Will retry."
+        sleep 5
+        retry
+      end
+    end
+    raise
+  end
   if response['errors']
     puts "Full error text:"
     pp response['errors']
