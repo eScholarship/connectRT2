@@ -218,7 +218,7 @@ def assignEmbargo(metaHash)
     return '2999-12-31' # this should be long enough to count as indefinite
   else
     case reqPeriod
-      when nil, /Not known|No embargo/
+      when nil, /Not known|No embargo|Unknown/
         return nil
       when /Indefinite/
         return '2999-12-31' # this should be long enough to count as indefinite
