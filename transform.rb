@@ -310,7 +310,7 @@ def elementsToJSON(oldData, who, feed, ark, feedFile)
 
   # Context
   assignSeries(data, getCompletionDate(data, metaHash), metaHash)
-  lookupRepecID(elemPubID) and data[:localIDS] << { scheme: 'OTHER_ID', subScheme: 'repec', id: lookupRepecID(elemPubID) }
+  lookupRepecID(elemPubID) and data[:localIDs] << { scheme: 'OTHER_ID', subScheme: 'repec', id: lookupRepecID(elemPubID) }
   metaHash.key?("report-number") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'report', id: metaHash.delete('report-number')
   }
