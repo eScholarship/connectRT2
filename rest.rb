@@ -179,7 +179,7 @@ def submitAPIMutation(mutation, vars)
   headers['Privileged'] = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
-               :body => { variables: varHash, query: query }.to_json.gsub("%", "%25"))
+               :body => { variables: varHash, query: query }.to_json)
   response.code != 200 and raise("Internal error (graphql): " +
      "HTTP code #{response.code} - #{response.message}.\n" +
      "#{response.body}")
