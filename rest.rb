@@ -152,7 +152,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
        "HTTP code #{response.code} - #{response.message}.\n" +
        "#{response.body}")
   rescue
-    if response && response.code == 500 && response.body.length < 100
+    if response && [500,502,504].include?(response.code) && response.body.length < 100
       retries += 1
       if retries <= 5
         puts "Empty code 500 response. Will retry."
