@@ -652,7 +652,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
   content_type "text/xml"
 
   fileName = params['name'] or raise("missing 'name' param")
-  fileVersion = params['description'] or userErrorHalt(shortArk, "You must choose a 'File version'.")
+  fileVersion = params['description']
 
   info = $recentArkInfo[shortArk]
   if !info
@@ -690,10 +690,12 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     end
     info[:meta][:contentLink] = "#{$submitServer}/bitstreamTmp/#{tmpFile}"
     info[:meta][:contentFileName] = fileName
-    info[:meta][:contentVersion] = case fileVersion
-      when /(Accepted|Submitted) version/; 'AUTHOR_VERSION'
-      when "Published version"; 'PUBLISHER_VERSION'
-      else raise("unrecognized fileVersion #{fileVersion.inspect}")
+    if fileVersion
+      info[:meta][:contentVersion] = case fileVersion
+        when /(Accepted|Submitted) version/; 'AUTHOR_VERSION'
+        when "Published version"; 'PUBLISHER_VERSION'
+        else raise("unrecognized fileVersion #{fileVersion.inspect}")
+      end
     end
   end
 
