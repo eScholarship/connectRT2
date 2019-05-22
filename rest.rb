@@ -151,11 +151,12 @@ def accessAPIQuery(query, vars = {}, privileged = false)
     response.code != 200 and raise("Internal error (graphql): " +
        "HTTP code #{response.code} - #{response.message}.\n" +
        "#{response.body}")
-  rescue
-    if response && [500,502,504].include?(response.code) && response.body.length < 200
+  rescue Exception => exc
+    if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
+       (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer/i)
       retries += 1
-      if retries <= 5
-        puts "Empty code 500 response. Will retry."
+      if retries <= 10
+        puts "Empty code 500 response or exception: #{exc.to_s.inspect}. Will retry."
         sleep 5
         retry
       end
