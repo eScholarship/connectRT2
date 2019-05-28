@@ -153,7 +153,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
        "#{response.body}")
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
-       (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer/i)
+       (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout/i)
       retries += 1
       if retries <= 10
         puts "Empty code 500 response or exception: #{exc.to_s.inspect}. Will retry."
@@ -312,31 +312,44 @@ def verifyLoggedIn
 end
 
 ###################################################################################################
+def genCollectionData(unitID)
+  data = accessAPIQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
+  xmlGen('''
+    <collection>
+      <link>/rest/collections/13030/<%= unitID %></link>
+      <expand>parentCommunityList</expand>
+      <expand>parentCommunity</expand>
+      <expand>items</expand>
+      <expand>license</expand>
+      <expand>logo</expand>
+      <expand>all</expand>
+      <handle>13030/<%= unitID %></handle>
+      <name><%= unitID %></name>
+      <type>collection</type>
+      <UUID><%= unitID %></UUID>
+      <copyrightText/>
+      <introductoryText/>
+      <numberItems><%= data.dig("items", "total") %></numberItems>
+      <shortDescription><%= unitID %></shortDescription>
+      <sidebarText/>
+    </collection>''', binding, xml_header: false)
+end
+
+###################################################################################################
+post "/dspace-rest/collections/find-collection" do
+  verifyLoggedIn
+  content_type "text/xml"
+  request.body.rewind
+  unitID = request.body.read.strip
+  unitID =~ /^[\w_]+$/ or raise("unable to parse find-collection id #{unitID.inspect}")
+  genCollectionData(unitID)
+end
+
+###################################################################################################
 get "/dspace-rest/collections" do
   verifyLoggedIn
   content_type "text/xml"
-  inner = %w{cdl_rw iis_general root}.map { |unitID|
-    data = accessAPIQuery("unit(id: $unitID) { items { total } }", { unitID: ["ID!", unitID] }).dig("unit")
-    xmlGen('''
-      <collection>
-        <link>/rest/collections/13030/<%= unitID %></link>
-        <expand>parentCommunityList</expand>
-        <expand>parentCommunity</expand>
-        <expand>items</expand>
-        <expand>license</expand>
-        <expand>logo</expand>
-        <expand>all</expand>
-        <handle>13030/<%= unitID %></handle>
-        <name><%= unitID %></name>
-        <type>collection</type>
-        <UUID><%= unitID %></UUID>
-        <copyrightText/>
-        <introductoryText/>
-        <numberItems><%= data.dig("items", "total") %></numberItems>
-        <shortDescription><%= unitID %></shortDescription>
-        <sidebarText/>
-      </collection>''', binding, xml_header: false)
-  }
+  inner = %w{cdl_rw iis_general root}.map { |unitID| genCollectionData(unitID) }
   xmlGen('''
     <collections>
       <%== inner.join("\n") %>
