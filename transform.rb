@@ -137,6 +137,7 @@ def assignSeries(data, completionDate, metaHash)
     pair =~ /^(\d+):(.*)$/ or raise("can't parse group pair #{pair.inspect}")
     [$1.to_i, $2]
   }]
+  rgpoUnits = Set.new
   campusSeries = groups.map { |groupID, groupName|
 
     # Regular campus
@@ -148,22 +149,28 @@ def assignSeries(data, completionDate, metaHash)
       # If completed on or after 2017-01-08, check funding
       if (completionDate >= Date.new(2017,1,8)) && metaHash['funder-name'] &&
          (metaHash['funder-name'].include?($groupToRGPO[groupID]))
-        "#{$groupToRGPO[groupID].downcase}_rw"
+        rgpoUnit = "#{$groupToRGPO[groupID].downcase}_rw"
       else
-        "rgpo_rw"
+        rgpoUnit = "rgpo_rw"
       end
+      rgpoUnits << rgpoUnit
+      rgpoUnit
     else
       nil
     end
   }.compact
 
-  # Add campus series in sorted order (special: always sort lbnl first)
-  campusSeries.sort { |a, b| a.sub('lbnl','0') <=> b.sub('lbnl','0') }.each { |s|
+  # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
+  rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
+  campusSeries.sort { |a, b|
+    a.sub('lbnl','0').sub(rgpoPat,'zz') <=> b.sub('lbnl','0').sub(rgpoPat,'zz')
+  }.each { |s|
     series.key?(s) or series[s] = true
   }
 
   # Figure out which departments correspond to which Elements groups.
   # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
+  # Note: departments always come after campus
   depts = Hash[DB.fetch("""SELECT id unit_id, attrs->>'$.elements_id' elements_id FROM units
                            WHERE attrs->>'$.elements_id' is not null""").map { |row|
     [row[:elements_id].to_i, row[:unit_id]]
