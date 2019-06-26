@@ -141,8 +141,8 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   end
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
   headers = { 'Content-Type' => 'application/json' }
-  privKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
-  privileged and headers['Privileged'] = privKey
+  privileged and headers['Privileged'] = $privApiKey
+  ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
   begin
     retries ||= 0
     response = HTTParty.post("#{$escholServer}/graphql",
@@ -177,7 +177,8 @@ def submitAPIMutation(mutation, vars)
   query = "mutation(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{mutation} }"
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
   headers = { 'Content-Type' => 'application/json' }
-  headers['Privileged'] = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_KEY")
+  headers['Privileged'] = $privApiKey
+  ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
   response = HTTParty.post("#{$escholServer}/graphql",
                :headers => headers,
                :body => { variables: varHash, query: query }.to_json)
@@ -814,7 +815,9 @@ get "/dspace-oai" do
       </OAI-PMH>''', binding)
   else
     # Proxy the OAI query over to the eschol API server, and return its results
-    response = HTTParty.get("#{$escholServer}/oai", query: params, headers: { 'Privileged' => $privApiKey })
+    headers = { 'Privileged' => $privApiKey }
+    ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
+    response = HTTParty.get("#{$escholServer}/oai", query: params, headers: headers)
     content_type response.headers['Content-Type']
     return [response.code, response.body]
   end
