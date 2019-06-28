@@ -65,7 +65,7 @@ error 500 do
   htmlBody = textBody.gsub("\n", "<br/>")
   mail = Mail.new do
     from     "eschol@#{`/bin/hostname --fqdn`.strip}"
-    to       "r.c.martin.haye@ucop.edu, Andy.Mardesich@ucop.edu, kirk.hastings@ucop.edu"
+    to       "r.c.martin.haye@ucop.edu, Andy.Mardesich@ucop.edu, brian.tingle@ucop.edu"
     subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} RT2 error"
     text_part do
       content_type 'text/plain; charset=UTF-8'
