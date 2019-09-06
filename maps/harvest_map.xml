@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <xwalkin:consolidated-maps xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.symplectic.co.uk/elements/xwalkin ../../schemas/XwalkIn.xsd" xmlns:xwalkin="http://www.symplectic.co.uk/elements/xwalkin" xmlns:xwalk="http://www.symplectic.co.uk/elements/xwalkcommon">
   <xwalk:parameters>
     <xwalk:parameter name="default-currency" value="money:usd" />
@@ -79,9 +79,9 @@
   </xwalk:elements-metadata>
   <xwalk:field-maps>
     <xwalk:field-map name="import-eschol-article">
-      <!-- 
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
                 Journal Article:
-                
+
                 Essential:
                 title
                 authors
@@ -91,7 +91,7 @@
                 publisher*
                 date of acceptence**
                 online publication date**
-                
+
                 Optional:
                 DOI
                 publication date
@@ -102,7 +102,7 @@
                 LBL report number***
                 pagination*
                 url for publisher's version of article**
-                
+
                 * not currently available through API
                 ** no equivalent value in eSchol
                 *** not exactly sure how to pass this through
@@ -171,9 +171,9 @@
       </xwalk:field-mapping>
     </xwalk:field-map>
     <xwalk:field-map name="import-eschol-chapter">
-      <!--
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
                 Chapter:
-                
+
                 Essential:
                 book title
                 chapter title
@@ -186,7 +186,7 @@
                 abstract
                 keywords
                 online publication date**
-                
+
                 Optional:
                 DOI
                 publication date
@@ -195,7 +195,7 @@
                 publisher
                 publisher url**
                 place of publication**
-                
+
                 * not currently available through API
                 ** no equivalent value in eSchol
             -->
@@ -275,9 +275,9 @@
       </xwalk:field-mapping>
     </xwalk:field-map>
     <xwalk:field-map name="import-eschol-monograph">
-      <!-- 
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
                 Monograph:
-                
+
                 Essential:
                 title
                 edition**
@@ -287,7 +287,7 @@
                 abstract
                 keywords
                 online publication date**
-                
+
                 Optional:
                 DOI
                 publication date
@@ -296,7 +296,7 @@
                 publisher*
                 publisher url**
                 place of publication**
-                
+
                 * not currently available through API
                 ** no equivalent value in eSchol
             -->
@@ -370,9 +370,9 @@
       </xwalk:field-mapping>
     </xwalk:field-map>
     <xwalk:field-map name="import-eschol-etd">
-      <!--
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
                 Theses/Dissertation:
-                
+
                 Essential:
                 thesis type**
                 title
