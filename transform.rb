@@ -101,12 +101,6 @@ def convertPubDate(pubDate)
 end
 
 ###################################################################################################
-def convertExtent(metaHash, out)
-  metaHash.key?('fpage') and out[:fpage] = metaHash.delete('fpage')
-  metaHash.key?('lpage') and out[:lpage] = metaHash.delete('lpage')
-end
-
-###################################################################################################
 def convertFileVersion(fileVersion)
   case fileVersion
     when /(Author final|Submitted) version/; 'AUTHOR_VERSION'
@@ -259,6 +253,8 @@ def lookupRepecID(elemPubID)
     resp = HTTParty.get("#{apiHost}/publications/#{elemPubID}", :basic_auth =>
       { :username => ENV['ELEMENTS_API_USERNAME'] || raise("missing env ELEMENTS_API_USERNAME"),
         :password => ENV['ELEMENTS_API_PASSWORD'] || raise("missing env ELEMENTS_API_PASSWORD") })
+    resp.code == 404 and return nil  # sometimes Elements does meta update on non-existent pub, e.g 2577213. Weird.
+    resp.code == 410 and return nil  # sometimes Elements does meta update on deleted pub, e.g 2564054. Weird.
     resp.code == 200 or raise("Got error from Elements API for pub #{elemPubID}: #{resp}")
 
     data = Nokogiri::XML(resp.body).remove_namespaces!
@@ -273,18 +269,14 @@ end
 ###################################################################################################
 # Take feed XML from Elements and make an eschol JSON record out of it. Note that if you pass
 # existing eschol data in, it will be retained if Elements doesn't override it.
-def elementsToJSON(oldData, who, feed, ark, feedFile)
-
-  # Parse out the flat list of metadata from the feed into a handy hash
-  metaHash = parseMetadataEntries(feed)
+def elementsToJSON(elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # eSchol ARK identifier (provisional ID minted previously for new items)
-  data = oldData ? oldData.clone : {}
+  data = {}
   data[:id] = ark
 
   # Identify the source system
   data[:sourceName] = 'elements'
-  elemPubID = metaHash.delete('elements-pub-id') || raise("missing pub-id")
   data[:sourceID] = elemPubID
   data[:sourceFeedLink] = "#{$submitServer}/bitstreamTmp/#{feedFile}"
   data[:localIDs] = [{id: elemPubID, scheme: 'OA_PUB_ID'}]
@@ -333,7 +325,7 @@ def elementsToJSON(oldData, who, feed, ark, feedFile)
 
   # History
   data[:published] = convertPubDate(metaHash.delete('publication-date'))
-  data[:submitterEmail] = who
+  data[:submitterEmail] = submitterEmail
 
   # All done.
   return data
@@ -345,7 +337,7 @@ def transformPeople(pieces, role)
   # Now build the resulting UCI author records.
   people = []
   person = nil
-  pieces.split("||").each { |line|
+  pieces.split(/\|\| *\n/).each { |line|
     line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
     field, value = $1, $2
     case field

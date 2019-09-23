@@ -254,7 +254,7 @@ def clearItemFiles(ark)
 end
 
 ###################################################################################################
-def approveItem(ark, info, replaceOnlyFiles)
+def approveItem(ark, info, replaceOnly: nil)
   ark =~ /^qt\w{8}$/ or raise("invalid ark")
   info && info[:meta] or raise("missing data")
 
@@ -263,8 +263,10 @@ def approveItem(ark, info, replaceOnlyFiles)
 
   # Now run the right API mutation
   begin
-    if replaceOnlyFiles
+    if replaceOnly == :files
       submitAPIMutation("replaceFiles(input: $input) { message }", { input: ["ReplaceFilesInput!", info[:meta]] })
+    elsif replaceOnly == :metadata
+      submitAPIMutation("replaceMetadata(input: $input) { message }", { input: ["ReplaceMetadataInput!", info[:meta]] })
     else
       outID = submitAPIMutation("depositItem(input: $input) { id }",
                                 { input: ["DepositItemInput!", info[:meta]] }).dig("depositItem", "id")
@@ -382,7 +384,9 @@ def formatItemData(data, expand)
   itemID.sub!("ark:/13030/", "")
 
   if expand =~ /metadata/
-    metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+    fullData = data.clone
+    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+    metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
   else
     metaXML = ""
   end
@@ -595,6 +599,46 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
 end
 
 ###################################################################################################
+def processMetaUpdate(itemID, metaHash, feedFile)
+  content_type "text/plain"
+
+  puts "In processMetaUpdate."
+
+  if !metaHash.key?('groups')
+    puts "...no groups present; skipping update."
+    return nil # content length zero, and HTTP 200 OK
+  end
+
+  # There are a few pieces of data that don't come with subsequent updates that we need. Get
+  # them from the old item.
+  data = accessAPIQuery(%{
+    item(id: $itemID) {
+      source
+      localIDs { id scheme }
+      published
+      submitterEmail
+    }}, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
+
+  if data['source'] != 'oa_harvester'
+    puts "...skipping metadata update of non-Elements item (it's a #{data['source'].inspect} item)"
+    return nil # content length zero, and HTTP 200 OK
+  end
+
+  pubID = (data['localIDs'] || {}).select{ |lid| lid['scheme'] == "OA_PUB_ID" }.dig(0, 'id') or raise("can't find old pubID")
+  pubDate = data['published'] or raise("can't find old pub date")
+  who = data['submitterEmail'] or raise("can't find old submitter email")
+
+  puts "Found: pubID=#{pubID.inspect} who=#{who.inspect}"
+
+  metaHash['deposit-date'] = pubDate
+  jsonMeta = elementsToJSON(pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
+  puts "jsonMeta:"; pp jsonMeta
+
+  approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
+  return nil  # content length zero, and HTTP 200 OK
+end
+
+###################################################################################################
 # e.g. PUT /rest/items/qt12345678/metadata
 # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
 #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
@@ -606,7 +650,6 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # publish the item.
   request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
 
-
   # Grab the body. It should be an XML set of metadata entries.
   request.body.rewind
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
@@ -617,14 +660,15 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   feedPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{feedFile}"
   open(feedPath, "w") { |out| out.write(body.to_xml(indent: 3)) }
 
-  # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
-  # we created in the earlier sword post.
-  pubID = who = nil
-  body.xpath(".//metadataentry").each { |ent|
-    ent.text_at("key") == "elements-pub-id" and pubID = ent.text_at("value")
-    ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
-  }
-  pubID or raise("Can't find elements-pub-id in feed")
+  # Parse out the flat list of metadata from the feed into a handy hash
+  metaHash = parseMetadataEntries(body)
+
+  # For metadata update, we already have the info we need. Process it and stop.
+  metaHash['eschol-meta-update'] == 'true' and return processMetaUpdate(itemID, metaHash, feedFile)
+
+  # For normal deposit, we require a pub ID and depositor
+  pubID = metaHash['elements-pub-id'] or raise("Can't find elements-pub-id in feed")
+  who = metaHash['depositor-email']
   who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
 
@@ -632,7 +676,7 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   $recentArkInfo[itemID] = { pubID: pubID, who: who }
 
   # Translate the metadata from Elements' dspace format to eSchol's json format
-  jsonMeta = elementsToJSON({}, who, body, "ark:/13030/#{itemID}", feedFile)
+  jsonMeta = elementsToJSON(pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
   puts "jsonMeta="; pp jsonMeta
 
   # And record all of it for the commit which will come later
@@ -759,7 +803,7 @@ delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, 
 
   request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing policy delete")
   info = $recentArkInfo[itemID] or raise("redeposit without expected file")
-  approveItem(itemID, info, true)  # replaceOnlyFiles=true
+  approveItem(itemID, info, replaceOnly: :files)
 
   # Return a fake response.
   [204, "Deleted."]
@@ -780,7 +824,7 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
 
   # Time to publish this thing.
   info = $recentArkInfo[itemID] or errHalt(400, "data has expired")
-  approveItem(itemID, info, false)  # replaceOnlyFiles=false
+  approveItem(itemID, info)
 
   # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
