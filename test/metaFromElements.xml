@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadataentries>
+  <metadataentry>
+    <key>eschol-meta-update</key>
+    <value>true</value>
+  </metadataentry>
+  <metadataentry>
+    <key>title</key>
+    <value>Test15 Win the Brand Relevance Battle and Then Build Competitor Barriers</value>
+  </metadataentry>
+  <metadataentry>
+    <key>volume</key>
+    <value>54</value>
+  </metadataentry>
+  <metadataentry>
+    <key>authors</key>
+    <value>
+[start-person] ||
+[lastname] Aaker||
+[firstnames] David A||
+[initials] DA||
+[resolved-user-email] daaker@berkeley.edu||
+[end-person] </value>
+  </metadataentry>
+  <metadataentry>
+    <key>editors</key>
+    <value>
+[start-person] ||
+[end-person] </value>
+  </metadataentry>
+  <metadataentry>
+    <key>groups</key>
+    <value>435:UC Berkeley (senate faculty)|465:Haas School of Business|430:UC Berkeley|1:University of California|434:UC Berkeley (all faculty)|</value>
+  </metadataentry>
+  <metadataentry>
+    <key>object.type</key>
+    <value>journal-article</value>
+  </metadataentry>
+  <metadataentry>
+    <key>abstract</key>
+    <value>the only way to achieve real growth Is to develop offerings so Innovative that they create new categories or subcategories making competitors irrelevant because they lack a "must have" feature or benefit - to win the brand relevance competition. The alternative, engaging in "my brand is better than your brand" brand preference competition, virtually never works because of market inertia. This article, based in part on hundreds of case studies, shows how to identify the "must haves" and discusses barriers to competitors such as going beyond functional benefits, finding shared interests with customers, ongoing innovation, superior execution, scaling the concept, becoming an exemplar, and branding the innovation. © 2012 by The Regents of the University of California.</value>
+  </metadataentry>
+  <metadataentry>
+    <key>publisher</key>
+    <value>SAGE Publications</value>
+  </metadataentry>
+  <metadataentry>
+    <key>publication-status</key>
+    <value>Published</value>
+  </metadataentry>
+  <metadataentry>
+    <key>publication-date</key>
+    <value>2012-01</value>
+  </metadataentry>
+  <metadataentry>
+    <key>journal</key>
+    <value>California Management Review</value>
+  </metadataentry>
+  <metadataentry>
+    <key>issue</key>
+    <value>2</value>
+  </metadataentry>
+  <metadataentry>
+    <key>issn</key>
+    <value>0008-1256</value>
+  </metadataentry>
+  <metadataentry>
+    <key>eissn</key>
+    <value>2162-8564</value>
+  </metadataentry>
+  <metadataentry>
+    <key>doi</key>
+    <value>10.1525/cmr.2012.54.2.43</value>
+  </metadataentry>
+</metadataentries>

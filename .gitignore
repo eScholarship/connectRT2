@@ -5,6 +5,7 @@ gems/
 logs/
 node_modules/
 old/
+test/cookies
 tools/cache*
 tmp/
 .DS_Store

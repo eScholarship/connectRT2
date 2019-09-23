@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+set -x
+
+rm -f cookies
+curl --cookie-jar cookies -X POST https://pub-submit-stg.escholarship.org/dspace-rest/login -d "email=martin.haye%40ucop.edu&password=Say4lank-viscus"
+curl --cookie cookies -X PUT https://pub-submit-stg.escholarship.org/dspace-rest/items/qtttwqdkg2/metadata -d @metaFromElements.xml
