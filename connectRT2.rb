@@ -50,14 +50,11 @@ get "/chk" do
 end
 
 #################################################################################################
-# Error handling - include call stack for upper layers to report
-error 500 do
-  e = env['sinatra.error']
-  puts "Exception URL: #{request.url}"
-  textBody = "Unhandled exception: #{e.message}\n" +
+def sendErrorEmail(requestURL, subject, exc)
+  textBody = "Unhandled exception: #{exc.message}\n" +
              "connectRT2 URL: #{request.url}\n" +
              "connectRT2 backtrace:\n" +
-             "\t#{e.backtrace.join("\n\t")}\n"
+             "\t#{exc.backtrace.join("\n\t")}\n"
   textBody.gsub! %r{/apps/eschol/.*/gems/([^/]+)}, '...gems/\1/'
   textBody.gsub! %r{/apps/eschol/}, ''
   textBody.gsub! "<", "&lt;"
@@ -65,8 +62,8 @@ error 500 do
   htmlBody = textBody.gsub("\n", "<br/>")
   mail = Mail.new do
     from     "eschol@#{`/bin/hostname --fqdn`.strip}"
-    to       "r.c.martin.haye@ucop.edu, Andy.Mardesich@ucop.edu, kirk.hastings@ucop.edu"
-    subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} RT2 error"
+    to       "r.c.martin.haye@ucop.edu"
+    subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} #{subject}"
     text_part do
       content_type 'text/plain; charset=UTF-8'
       body         textBody
@@ -81,7 +78,22 @@ error 500 do
   rescue Exception => e
     puts "Error processing error email to: #{e}"
   end
+end
 
+#################################################################################################
+# Error handling - include call stack for upper layers to report
+error 500 do
+  puts "Exception URL: #{request.url}"
+  sendErrorEmail(request.url, "RT2 error", env['sinatra.error'])
   content_type "text/plain"
   return "Internal server error"
+end
+
+###################################################################################################
+# When called from the command line, the program acts as a web server, or can retry a meta update.
+if ARGV.delete('retryMetaUpdate')
+  retryMetaUpdate(ARGV)
+  exit 0 # Need to explicitly exit the program so Sinatra doesn't take over.
+else
+  # Do nothing and allow Sinatra to take the stage
 end

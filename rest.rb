@@ -3,6 +3,7 @@
 require 'cgi'
 require 'digest'
 require 'erubis'
+require 'fileutils'
 require 'securerandom'
 require 'unindent'
 require 'uri'
@@ -31,6 +32,8 @@ $privApiKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_K
 
 $rt2Email = ENV['RT2_DSPACE_EMAIL'] or raise("missing env RT2_DSPACE_EMAIL")
 $rt2Password = ENV['RT2_DSPACE_PASSWORD'] or raise("missing env RT2_DSPACE_PASSWORD")
+
+$feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
 
 ###################################################################################################
 ITEM_FIELDS = %{
@@ -599,43 +602,83 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
 end
 
 ###################################################################################################
-def processMetaUpdate(itemID, metaHash, feedFile)
-  content_type "text/plain"
+def retryMetaUpdate(qtArks)
+  qtArks.each do |itemID|
 
+    # Locate the old feed, and put it back in the temp dir for the retry
+    oldFeed = "/apps/eschol/tmp/rt2FailedMetaUpd/#{itemID}.feed.xml"
+    File.exist?(oldFeed) or raise("Can't find #{oldFeed}")
+    feedFile = "feed__#{SecureRandom.hex(20)}.xml"
+    feedPath = "#{$feedTmpDir}/#{feedFile}"
+    FileUtils.cp(oldFeed, feedPath)
+
+    # Read the feed and get it back into a hash
+    rawData = File.open(oldFeed, "r:UTF-8", &:read)
+    feedXML = Nokogiri::XML(rawData, nil, "UTF-8", &:noblanks).remove_namespaces!
+    metaHash = parseMetadataEntries(feedXML)
+
+    # And retry the update
+    processMetaUpdate(nil, itemID, metaHash, feedFile)
+
+    # Done. Clear the old file.
+    puts "Retry successful; removing #{oldFeed}."
+    File.unlink(oldFeed)
+  end
+end
+
+###################################################################################################
+def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
   puts "In processMetaUpdate."
 
-  if !metaHash.key?('groups')
-    puts "...no groups present; skipping update."
-    return nil # content length zero, and HTTP 200 OK
+  begin
+    if !metaHash.key?('groups')
+      puts "...no groups present; skipping update."
+      return nil # content length zero, and HTTP 200 OK
+    end
+
+    # There are a few pieces of data that don't come with subsequent updates that we need. Get
+    # them from the old item.
+    data = accessAPIQuery(%{
+      item(id: $itemID) {
+        source
+        localIDs { id scheme }
+        published
+        submitterEmail
+      }}, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
+
+    if data['source'] != 'oa_harvester'
+      puts "...skipping metadata update of non-Elements item (it's a #{data['source'].inspect} item)"
+      return nil # content length zero, and HTTP 200 OK
+    end
+
+    pubID = (data['localIDs'] || {}).select{ |lid| lid['scheme'] == "OA_PUB_ID" }.dig(0, 'id') or raise("can't find old pubID")
+    pubDate = data['published'] or raise("can't find old pub date")
+    who = data['submitterEmail'] or raise("can't find old submitter email")
+
+    puts "Found: pubID=#{pubID.inspect} who=#{who.inspect}"
+
+    metaHash['deposit-date'] = pubDate
+    jsonMeta = elementsToJSON(pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
+    #puts "jsonMeta:"; pp jsonMeta
+
+    approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
+    return nil  # content length zero, and HTTP 200 OK
+  rescue Exception => e
+    if requestURL
+      puts "Exception updating metadata: #{e}"
+
+      # Save the feed; it can later be retried from the command-line
+      savePath = "/apps/eschol/tmp/rt2FailedMetaUpd/#{itemID}.feed.xml"
+      FileUtils.mkdir_p(File.dirname(savePath))
+      File.rename("#{$feedTmpDir}/#{feedFile}", savePath)
+
+      # And send a notification
+      sendErrorEmail(requestURL, "RT2 metadata-update soft failure", e)
+      return nil
+    else
+      raise
+    end
   end
-
-  # There are a few pieces of data that don't come with subsequent updates that we need. Get
-  # them from the old item.
-  data = accessAPIQuery(%{
-    item(id: $itemID) {
-      source
-      localIDs { id scheme }
-      published
-      submitterEmail
-    }}, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
-
-  if data['source'] != 'oa_harvester'
-    puts "...skipping metadata update of non-Elements item (it's a #{data['source'].inspect} item)"
-    return nil # content length zero, and HTTP 200 OK
-  end
-
-  pubID = (data['localIDs'] || {}).select{ |lid| lid['scheme'] == "OA_PUB_ID" }.dig(0, 'id') or raise("can't find old pubID")
-  pubDate = data['published'] or raise("can't find old pub date")
-  who = data['submitterEmail'] or raise("can't find old submitter email")
-
-  puts "Found: pubID=#{pubID.inspect} who=#{who.inspect}"
-
-  metaHash['deposit-date'] = pubDate
-  jsonMeta = elementsToJSON(pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
-  puts "jsonMeta:"; pp jsonMeta
-
-  approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
-  return nil  # content length zero, and HTTP 200 OK
 end
 
 ###################################################################################################
@@ -643,6 +686,8 @@ end
 # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
 #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
 put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
+  content_type "text/plain"
+
   # The ID should be an ARK, obtained earlier from the Sword post.
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
 
@@ -653,18 +698,20 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # Grab the body. It should be an XML set of metadata entries.
   request.body.rewind
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
-  puts "dspaceMetaPut: body=#{body.to_xml}"
+  #puts "dspaceMetaPut: body=#{body.to_xml}"
 
   # Store the metadata feed in a URL-accessible place.
   feedFile = "feed__#{SecureRandom.hex(20)}.xml"
-  feedPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{feedFile}"
+  feedPath = "#{$feedTmpDir}/#{feedFile}"
   open(feedPath, "w") { |out| out.write(body.to_xml(indent: 3)) }
 
   # Parse out the flat list of metadata from the feed into a handy hash
   metaHash = parseMetadataEntries(body)
 
   # For metadata update, we already have the info we need. Process it and stop.
-  metaHash['eschol-meta-update'] == 'true' and return processMetaUpdate(itemID, metaHash, feedFile)
+  if metaHash['eschol-meta-update'] == 'true'
+    return processMetaUpdate(request.url, itemID, metaHash, feedFile)
+  end
 
   # For normal deposit, we require a pub ID and depositor
   pubID = metaHash['elements-pub-id'] or raise("Can't find elements-pub-id in feed")
@@ -684,7 +731,6 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   $recentArkInfo[itemID][:files] = [feedPath]
 
   # All done.
-  content_type "text/plain"
   nil  # content length zero, and HTTP 200 OK
 end
 
