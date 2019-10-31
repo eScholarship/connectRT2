@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
+  
+  <rel:category name="publication">
+    
+    <rel:masks>
+      <rel:mask name="only-items-deposited-to-eschol-are-relevant">
+        <rel:exclude-objects-without-source>
+          <rel:source name="dspace" />
+        </rel:exclude-objects-without-source>
+        <rel:exclude-sources>
+          <rel:source name="dspace" />
+        </rel:exclude-sources>
+      </rel:mask>
+    </rel:masks>
+    
+    <rel:hash-definitions>
+      <rel:hash-definition name="default">
+        <rel:value from="title" />
+        <rel:value from="parent-title" />
+        <rel:value from="abstract" />
+        <rel:value from="authors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+        </rel:value>
+        <rel:value from="editors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+        </rel:value>
+        <rel:value from="publisher" />
+        <rel:value from="publication-status" />
+        <rel:value from="publication-date" />
+        <rel:value from="isbn-10" />
+        <rel:value from="isbn-13" />
+        <rel:value from="issn" />
+        <rel:value from="eissn" />
+        <rel:value from="journal" />
+        <rel:value from="proceedings" />
+        <rel:value from="volume" />
+        <rel:value from="issue" />
+        <rel:value from="pagination" />
+        <rel:value from="doi" />
+        <rel:value from="number" />
+        <rel:value from="object.labels" />
+      </rel:hash-definition>
+    </rel:hash-definitions>
+    
+    <rel:relevance-definition-selector>
+      <rel:relevance-definition-selection mask="only-items-deposited-to-eschol-are-relevant" hash-definition="default" />
+    </rel:relevance-definition-selector>
+    
+  </rel:category>
+  
+</rel:xml-relevance-scheme>
