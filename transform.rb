@@ -4,6 +4,8 @@
 require 'date'
 require 'sequel'
 
+require_relative './sanitize.rb'
+
 ###################################################################################################
 # Connect to the eschol5 database server
 DB = Sequel.connect({
@@ -119,7 +121,7 @@ def assignSeries(data, completionDate, metaHash)
   series = {}
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
-    if !unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/
+    if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
       series[unit] = true
     end
   }
@@ -269,17 +271,16 @@ end
 ###################################################################################################
 # Take feed XML from Elements and make an eschol JSON record out of it. Note that if you pass
 # existing eschol data in, it will be retained if Elements doesn't override it.
-def elementsToJSON(elemPubID, submitterEmail, metaHash, ark, feedFile)
+def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # eSchol ARK identifier (provisional ID minted previously for new items)
-  data = {}
+  data = oldData ? oldData.clone : {}
   data[:id] = ark
 
   # Identify the source system
   data[:sourceName] = 'elements'
   data[:sourceID] = elemPubID
   data[:sourceFeedLink] = "#{$submitServer}/bitstreamTmp/#{feedFile}"
-  data[:localIDs] = [{id: elemPubID, scheme: 'OA_PUB_ID'}]
 
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
@@ -298,9 +299,11 @@ def elementsToJSON(elemPubID, submitterEmail, metaHash, ark, feedFile)
   end
 
   # Other top-level fields
-  metaHash.key?('title') and data[:title] = metaHash.delete('title')
-  metaHash.key?('abstract') and data[:abstract] = metaHash.delete('abstract')
+  metaHash.key?('title') and data[:title] = sanitizeHTML(metaHash.delete('title')).gsub(/\s+/, ' ').strip
+  metaHash.key?('abstract') and data[:abstract] = sanitizeHTML(metaHash.delete('abstract'))
+  data[:localIDs] = []
   metaHash.key?('doi') and data[:localIDs] << { id: metaHash.delete('doi'), scheme: 'DOI' }
+  data[:localIDs] << {id: elemPubID, scheme: 'OA_PUB_ID'}
   metaHash.key?('fpage') and data[:fpage] = metaHash.delete('fpage')
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))

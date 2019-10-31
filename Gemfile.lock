@@ -1,13 +1,16 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    crass (1.0.4)
     equivalent-xml (0.6.0)
       nokogiri (>= 1.4.3)
     erubis (2.7.0)
     ffi (1.9.25)
+    htmlentities (4.3.4)
     httparty (0.16.2)
       multi_xml (>= 0.5.2)
     json (2.1.0)
+    json-diff (0.4.1)
     listen (3.1.5)
       rb-fsevent (~> 0.9, >= 0.9.4)
       rb-inotify (~> 0.9, >= 0.9.7)
@@ -20,9 +23,14 @@ GEM
     mustermann (1.0.2)
     mysql2 (0.5.2)
     netrc (0.11.0)
+    nio4r (2.5.2)
     nokogiri (1.10.4)
       mini_portile2 (~> 2.4.0)
+    nokogumbo (2.0.1)
+      nokogiri (~> 1.8, >= 1.8.4)
     open4 (1.3.4)
+    puma (4.2.0)
+      nio4r (~> 2.0)
     rack (2.0.6)
     rack-protection (2.0.3)
       rack
@@ -32,6 +40,10 @@ GEM
     rerun (0.13.0)
       listen (~> 3.0)
     ruby_dep (1.5.0)
+    sanitize (5.1.0)
+      crass (~> 1.0.2)
+      nokogiri (>= 1.8.0)
+      nokogumbo (~> 2.0)
     sequel (5.12.0)
     sinatra (2.0.3)
       mustermann (~> 1.0)
@@ -49,14 +61,18 @@ PLATFORMS
 DEPENDENCIES
   equivalent-xml
   erubis
+  htmlentities
   httparty
   json
+  json-diff
   mail
   mysql2
   netrc
   nokogiri
   open4
+  puma
   rerun
+  sanitize
   sequel
   sinatra
   sqlite3
