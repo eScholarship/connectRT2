@@ -3,6 +3,8 @@
 require 'cgi'
 require 'digest'
 require 'erubis'
+require 'fileutils'
+require 'json-diff'
 require 'securerandom'
 require 'unindent'
 require 'uri'
@@ -32,11 +34,13 @@ $privApiKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_K
 $rt2Email = ENV['RT2_DSPACE_EMAIL'] or raise("missing env RT2_DSPACE_EMAIL")
 $rt2Password = ENV['RT2_DSPACE_PASSWORD'] or raise("missing env RT2_DSPACE_PASSWORD")
 
+$feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
+
 ###################################################################################################
-ITEM_FIELDS = %{
+ITEM_META_FIELDS = %{
   id
   title
-  authors {
+  authors(first:500) {
     nodes {
       email
       orcid
@@ -50,7 +54,7 @@ ITEM_FIELDS = %{
       }
     }
   }
-  contributors {
+  contributors(first:500) {
     nodes {
       role
       email
@@ -82,13 +86,12 @@ ITEM_FIELDS = %{
   abstract
   added
   bookTitle
-  contentLink
-  contentType
-  contentSize
   disciplines
   embargoExpires
-  externalLinks
   pagination
+  isPeerReviewed
+  fpage
+  lpage
   grants
   issn
   isbn
@@ -110,6 +113,13 @@ ITEM_FIELDS = %{
   type
   ucpmsPubType
   updated
+}
+
+ITEM_FILE_FIELDS = %{
+  contentLink
+  contentType
+  contentSize
+  externalLinks
   nativeFileName
   nativeFileSize
   suppFiles {
@@ -198,7 +208,7 @@ def getSession
   if request.env['HTTP_COOKIE'] =~ /JSESSIONID=(\w{32})/
     session = $1
     if $sessions.include?(session)
-      puts "Got existing session: #{session}"
+      #puts "Got existing session: #{session}"
       return session
     end
   end
@@ -207,7 +217,7 @@ def getSession
   $sessions.size >= MAX_SESSIONS and $sessions.shift
   $sessions[session] = { time: Time.now, loggedIn: false }
   headers 'Set-Cookie' => "JSESSIONID=#{session}; Path=/dspace-rest"
-  puts "Created new session: #{session}"
+  #puts "Created new session: #{session}"
   return session
 end
 
@@ -254,7 +264,7 @@ def clearItemFiles(ark)
 end
 
 ###################################################################################################
-def approveItem(ark, info, replaceOnlyFiles)
+def approveItem(ark, info, replaceOnly: nil)
   ark =~ /^qt\w{8}$/ or raise("invalid ark")
   info && info[:meta] or raise("missing data")
 
@@ -263,8 +273,10 @@ def approveItem(ark, info, replaceOnlyFiles)
 
   # Now run the right API mutation
   begin
-    if replaceOnlyFiles
+    if replaceOnly == :files
       submitAPIMutation("replaceFiles(input: $input) { message }", { input: ["ReplaceFilesInput!", info[:meta]] })
+    elsif replaceOnly == :metadata
+      submitAPIMutation("replaceMetadata(input: $input) { message }", { input: ["ReplaceMetadataInput!", info[:meta]] })
     else
       outID = submitAPIMutation("depositItem(input: $input) { id }",
                                 { input: ["DepositItemInput!", info[:meta]] }).dig("depositItem", "id")
@@ -302,13 +314,13 @@ post "/dspace-rest/login" do
   content_type "text/plain;charset=utf-8"
   params['email'] == $rt2Email && params['password'] == $rt2Password or halt(401, "Unauthorized.\n")
   $sessions[getSession][:loggedIn] = true
-  puts "==> Login ok, setting flag on session."
+  #puts "==> Login ok, setting flag on session."
   "OK\n"
 end
 
 ###################################################################################################
 def verifyLoggedIn
-  puts "Verifying login, cookie=#{request.env['HTTP_COOKIE']}"
+  #puts "Verifying login, cookie=#{request.env['HTTP_COOKIE']}"
   $sessions[getSession][:loggedIn] or halt(401, "Unauthorized.\n")
 end
 
@@ -382,7 +394,9 @@ def formatItemData(data, expand)
   itemID.sub!("ark:/13030/", "")
 
   if expand =~ /metadata/
-    metaXML = stripHTML(XmlSimple.xml_out(data, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+    fullData = data.clone
+    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+    metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
   else
     metaXML = ""
   end
@@ -418,18 +432,16 @@ def formatItemData(data, expand)
 
   if expand =~ /bitstreams/
     arr = []
-    if data['contentLink'] && data['contentType'] == "application/pdf"
-      if data['nativeFileName']
-        arr << { id: "#{itemID}/content/#{data['nativeFileName']}",
-                 name: data['nativeFileName'], size: data['nativeFileSize'],
-                 link: filePreviewLink(itemID, "content/#{CGI.escape(data['nativeFileName'])}"),
-                 type: data['contentType'] }
-      else
-        arr << { id: "#{itemID}/content/#{itemID}.pdf",
-                 name: "#{itemID}.pdf", size: data['contentSize'],
-                 link: filePreviewLink(itemID, "content/#{itemID}.pdf"),
-                 type: data['contentType'] }
-      end
+    if data['nativeFileName']
+      arr << { id: "#{itemID}/content/#{data['nativeFileName']}",
+               name: data['nativeFileName'], size: data['nativeFileSize'],
+               link: filePreviewLink(itemID, "content/#{CGI.escape(data['nativeFileName'])}"),
+               type: data['contentType'] }
+    elsif data['contentLink'] && data['contentType'] == "application/pdf"
+      arr << { id: "#{itemID}/content/#{itemID}.pdf",
+               name: "#{itemID}.pdf", size: data['contentSize'],
+               link: filePreviewLink(itemID, "content/#{itemID}.pdf"),
+               type: data['contentType'] }
     end
     (data['suppFiles'] || []).each { |supp|
         arr << { id: "#{itemID}/content/supp/#{CGI.escape(supp['file'])}",
@@ -485,7 +497,8 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
   content_type "text/xml"
-  data = accessAPIQuery("item(id: $itemID) { #{ITEM_FIELDS} }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  data = accessAPIQuery("item(id: $itemID) { #{ITEM_META_FIELDS} #{ITEM_FILE_FIELDS} }",
+                        { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
   data or halt(404)
   return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + formatItemData(data, params['expand'])
 end
@@ -515,7 +528,7 @@ get %r{/dspace-rest/collections/([^/]+)/items} do |collection|
         items(first: $limit, include: [EMBARGOED,WITHDRAWN,EMPTY,PUBLISHED], more: $more) {
           more
           nodes {
-            #{ITEM_FIELDS}
+            #{ITEM_META_FIELDS} #{ITEM_FILE_FIELDS}
           }
         }
       }""",
@@ -595,10 +608,147 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
 end
 
 ###################################################################################################
+def retryMetaUpdate(qtArks)
+  qtArks.each do |itemID|
+
+    # Locate the old feed, and put it back in the temp dir for the retry
+    oldFeed = "#{$scriptDir}/failedUpdates/#{itemID}.feed.xml"
+    File.exist?(oldFeed) or raise("Can't find #{oldFeed}")
+    feedFile = "feed__#{SecureRandom.hex(20)}.xml"
+    feedPath = "#{$feedTmpDir}/#{feedFile}"
+    FileUtils.cp(oldFeed, feedPath)
+
+    # Read the feed and get it back into a hash
+    rawData = File.open(oldFeed, "r:UTF-8", &:read)
+    feedXML = Nokogiri::XML(rawData, nil, "UTF-8", &:noblanks).remove_namespaces!
+    metaHash = parseMetadataEntries(feedXML)
+
+    # And retry the update
+    processMetaUpdate(nil, itemID, metaHash, feedFile)
+
+    # Done. Clear the old file.
+    fixedLoc = "#{$scriptDir}/fixedUpdates/#{itemID}.feed.xml"
+    FileUtils.mkdir_p(File.dirname(fixedLoc))
+    puts "Retry successful; moving to #{fixedLoc}."
+    File.rename(oldFeed, fixedLoc)
+  end
+end
+
+###################################################################################################
+def removeNils(struc)
+  if struc.is_a?(Hash)
+    out = {}
+    struc.keys.sort.each { |k|
+      if struc[k].is_a?(Hash) && struc[k].size == 1 && struc[k].keys[0] == 'nodes'
+        out[k] = removeNils(struc[k].values[0])
+      elsif k == 'units' && struc[k].is_a?(Array) && struc[k][0].is_a?(Hash)
+        out[k] = struc[k].map { |unitInfo| unitInfo['id'] }
+      elsif k == 'grants' && struc[k].is_a?(Array) && struc[k][0].is_a?(Hash)
+        out[k] = struc[k].map { |grantInfo| grantInfo['name'] }
+      else
+        struc[k].nil? or out[k] = removeNils(struc[k])
+      end
+    }
+    return out
+  elsif struc.is_a?(Array)
+    out = []
+    struc.each { |v|
+      v.nil? or out << removeNils(v)
+    }
+    return out
+  else
+    return struc
+  end
+end
+
+###################################################################################################
+def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
+  puts "In processMetaUpdate."
+
+  begin
+    if !metaHash.key?('groups')
+      puts "...no groups present; skipping update."
+      return nil # content length zero, and HTTP 200 OK
+    end
+
+    # There are a few pieces of data that don't come with subsequent updates that we need. Get
+    # them from the old item. But let's grab everything so we can do a detailed diff.
+    itemQuery = %{ item(id: $itemID) { #{ITEM_META_FIELDS} } }
+    data = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
+
+    if data['source'] != 'oa_harvester'
+      puts "...skipping metadata update of non-Elements item (it's a #{data['source'].inspect} item)"
+      return nil # content length zero, and HTTP 200 OK
+    end
+
+    pubID = metaHash['elements-pub-id'] or raise("Can't find elements-pub-id in feed")
+    pubDate = data['published'] or raise("can't find old pub date")
+    who = "elements@escholarship.org"
+
+    puts "Found: pubID=#{pubID.inspect}"
+
+    oldData = {}
+    oldData[:units] = (data["units"] || []).map { |unit| unit['id'] }
+    metaHash['deposit-date'] = pubDate
+    jsonMeta = elementsToJSON(oldData, pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
+    jsonMeta[:embargoExpires] = data['embargoExpires']
+    jsonMeta[:rights] = data['rights']
+    #puts "jsonMeta:"; pp jsonMeta
+
+    # We don't generate certain fields on our side
+    d1 = removeNils(JSON.parse(data.to_json))
+    %w{added pagination permalink source status updated}.each { |key| d1.delete(key) }
+
+    # Certain fields aren't available via an API query
+    d2 = removeNils(JSON.parse(jsonMeta.to_json))
+    %w{pubRelation sourceFeedLink sourceID sourceName submitterEmail}.each { |key| d2.delete(key) }
+
+    #puts "\nd1="; pp d1
+    #puts "\nd2="; pp d2
+    diff = JsonDiff.diff(d1, d2, include_was: true)
+    puts "Anticipated diff:"; pp diff
+    if diff.empty?
+      puts "No anticipated diff; skipping update."
+      return nil
+    end
+
+    approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
+
+    # During development, let's re-query the data to see what diffs there might be
+    newData = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or raise
+    diff = JsonDiff.diff(data, newData, include_was: true)
+    diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing
+    #puts "\nold data:"; pp data
+    #puts "\nnew data:"; pp newData
+    puts "\nFinal metadata diff:"
+    pp diff
+
+    return nil  # content length zero, and HTTP 200 OK
+  rescue Exception => e
+    if requestURL
+      puts "Exception updating metadata: #{e}"
+
+      # Save the feed; it can later be retried from the command-line
+      savePath = "#{$scriptDir}/failedUpdates/#{itemID}.feed.xml"
+      FileUtils.mkdir_p(File.dirname(savePath))
+      File.rename("#{$feedTmpDir}/#{feedFile}", savePath)
+
+      # And send a notification
+      sendErrorEmail(requestURL, "RT2 metadata-update soft failure", e)
+      return nil
+    else
+      raise
+    end
+  end
+end
+
+###################################################################################################
 # e.g. PUT /rest/items/qt12345678/metadata
 # with data <metadataentries><metadataentry><key>dc.type</key><value>Article</value></metadataentry>
 #                            <metadataentry><key>dc.title</key><value>Targeting vivax malaria...
 put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
+  content_type "text/plain"
+
   # The ID should be an ARK, obtained earlier from the Sword post.
   itemID =~ /^qt\w{8}$/ or raise("itemID #{itemID.inspect} should be an eschol short ark")
 
@@ -606,25 +756,27 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   # publish the item.
   request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing edit")
 
-
   # Grab the body. It should be an XML set of metadata entries.
   request.body.rewind
   body = Nokogiri::XML(request.body.read, nil, "UTF-8", &:noblanks).remove_namespaces!
-  puts "dspaceMetaPut: body=#{body.to_xml}"
+  #puts "dspaceMetaPut: body=#{body.to_xml}"
 
   # Store the metadata feed in a URL-accessible place.
   feedFile = "feed__#{SecureRandom.hex(20)}.xml"
-  feedPath = "#{$homeDir}/apache/htdocs/bitstreamTmp/#{feedFile}"
+  feedPath = "#{$feedTmpDir}/#{feedFile}"
   open(feedPath, "w") { |out| out.write(body.to_xml(indent: 3)) }
 
-  # We should now be able to figure out the Elements pub ID. Let's associate it with the ark that
-  # we created in the earlier sword post.
-  pubID = who = nil
-  body.xpath(".//metadataentry").each { |ent|
-    ent.text_at("key") == "elements-pub-id" and pubID = ent.text_at("value")
-    ent.text_at("key") == "depositor-email" and who = ent.text_at("value")
-  }
-  pubID or raise("Can't find elements-pub-id in feed")
+  # Parse out the flat list of metadata from the feed into a handy hash
+  metaHash = parseMetadataEntries(body)
+
+  # For metadata update, we already have the info we need. Process it and stop.
+  if metaHash['eschol-meta-update'] == 'true'
+    return processMetaUpdate(request.url, itemID, metaHash, feedFile)
+  end
+
+  # For normal deposit, we require a pub ID and depositor
+  pubID = metaHash['elements-pub-id'] or raise("Can't find elements-pub-id in feed")
+  who = metaHash['depositor-email']
   who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
 
@@ -632,7 +784,7 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   $recentArkInfo[itemID] = { pubID: pubID, who: who }
 
   # Translate the metadata from Elements' dspace format to eSchol's json format
-  jsonMeta = elementsToJSON({}, who, body, "ark:/13030/#{itemID}", feedFile)
+  jsonMeta = elementsToJSON({}, pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
   puts "jsonMeta="; pp jsonMeta
 
   # And record all of it for the commit which will come later
@@ -640,7 +792,6 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   $recentArkInfo[itemID][:files] = [feedPath]
 
   # All done.
-  content_type "text/plain"
   nil  # content length zero, and HTTP 200 OK
 end
 
@@ -735,9 +886,16 @@ end
 ###################################################################################################
 get %r{/dspace-rest/bitstreams/([^/]+)/(.*)/policy} do |itemID, path|
   content_type "application/atom+xml; type=entry;charset=UTF-8"
-  itemData = accessAPIQuery("item(id: $itemID) { status }", { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
+  itemData = accessAPIQuery("item(id: $itemID) { status embargoExpires }",
+               { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
   itemData or errHalt(404, "item #{itemID} not found")
-  policyGroup = (itemData['status'] =~ /PUBLISHED|EMPTY/) ? 0 : 9
+  policyGroup = (itemData['status'] =~ /PUBLISHED|EMBARGOED/) ? 0 : 9
+  descrip = case itemData['status']
+    when 'EMBARGOED'; "EMBARGOED until #{itemData['embargoExpires']}"
+    else itemData['status']
+  end
+  startDateEl = (itemData['status'] == 'EMBARGOED') ?
+    "<startDate>#{itemData['embargoExpires']}T00:00:00-0700</startDate>" : nil
   [200, xmlGen('''
     <resourcePolicies>
       <resourcepolicy>
@@ -746,6 +904,8 @@ get %r{/dspace-rest/bitstreams/([^/]+)/(.*)/policy} do |itemID, path|
         <id><%= policyGroup+32 %></id>
         <resourceId><%= itemID+"/"+path %>/</resourceId>
         <resourceType>bitstream</resourceType>
+        <rpDescription><%= descrip %></rpDescription>
+        <%== startDateEl %>
         <rpType>TYPE_INHERITED</rpType>
       </resourcepolicy>
     </resourcePolicies>''', binding)]
@@ -759,7 +919,7 @@ delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, 
 
   request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing policy delete")
   info = $recentArkInfo[itemID] or raise("redeposit without expected file")
-  approveItem(itemID, info, true)  # replaceOnlyFiles=true
+  approveItem(itemID, info, replaceOnly: :files)
 
   # Return a fake response.
   [204, "Deleted."]
@@ -780,7 +940,7 @@ post "/dspace-swordv2/edit/:itemID" do |itemID|
 
   # Time to publish this thing.
   info = $recentArkInfo[itemID] or errHalt(400, "data has expired")
-  approveItem(itemID, info, false)  # replaceOnlyFiles=false
+  approveItem(itemID, info)
 
   # Elements doesn't seem to care what we return, as long as it's XML. Hmm.
   content_type "application/atom+xml; type=entry;charset=UTF-8"
