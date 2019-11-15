@@ -1,6 +1,7 @@
 bin/
 .bundle/
 config/
+fixedUpdates/
 gems/
 logs/
 node_modules/

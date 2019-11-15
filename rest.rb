@@ -260,6 +260,7 @@ def clearItemFiles(ark)
     # Clear old data so it can be re-done if needed
     info[:meta] = { id: "ark:/13030/#{ark}" }
     info[:files] = []
+    $recentArkInfo.delete(ark)
   end
 end
 
@@ -274,10 +275,13 @@ def approveItem(ark, info, replaceOnly: nil)
   # Now run the right API mutation
   begin
     if replaceOnly == :files
+      puts "Replacing files for item #{ark}."
       submitAPIMutation("replaceFiles(input: $input) { message }", { input: ["ReplaceFilesInput!", info[:meta]] })
     elsif replaceOnly == :metadata
+      puts "Replacing metadata for item #{ark}."
       submitAPIMutation("replaceMetadata(input: $input) { message }", { input: ["ReplaceMetadataInput!", info[:meta]] })
     else
+      puts "Depositing item #{ark}."
       outID = submitAPIMutation("depositItem(input: $input) { id }",
                                 { input: ["DepositItemInput!", info[:meta]] }).dig("depositItem", "id")
       outID.include?(ark) or raise("depositItem didn't work right")
@@ -496,6 +500,14 @@ get %r{/dspace-rest/(items|handle)/(.*)} do
   verifyLoggedIn
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
+
+  # If this get is on an item that was recently being deposited (or redeposited), this is our
+  # one and only signal that the depositing is done.
+  if $recentArkInfo.key?(itemID)
+    approveItem(itemID, $recentArkInfo[itemID], replaceOnly: :files)
+    $recentArkInfo.key?(itemID) and raise("failed to remove recentArkInfo after approve")
+  end
+
   content_type "text/xml"
   data = accessAPIQuery("item(id: $itemID) { #{ITEM_META_FIELDS} #{ITEM_FILE_FIELDS} }",
                         { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item")
@@ -913,14 +925,6 @@ end
 
 ###################################################################################################
 delete "/dspace-rest/bitstreams/:itemID/:filename/policy/:policyID" do |itemID, filename, policyID|
-  # After redepositing a file, Elements goes and deletes the policy from the new file.
-  # Not sure what that's supposed to mean, but maybe it's a signal to go ahead and republish
-  # the item.
-
-  request.env['HTTP_IN_PROGRESS'] != 'true' or errHalt(400, "non-finalizing policy delete")
-  info = $recentArkInfo[itemID] or raise("redeposit without expected file")
-  approveItem(itemID, info, replaceOnly: :files)
-
   # Return a fake response.
   [204, "Deleted."]
 end
