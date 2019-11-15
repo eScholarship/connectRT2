@@ -163,7 +163,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
        "#{response.body}")
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
-       (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout/i)
+       (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout|SSL_connect/i)
       retries += 1
       if retries <= 10
         puts "Empty code 500 response or exception: #{exc.to_s.inspect}. Will retry."
