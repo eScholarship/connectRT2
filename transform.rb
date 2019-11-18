@@ -307,7 +307,10 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?('fpage') and data[:fpage] = metaHash.delete('fpage')
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))
-  data[:rights] = metaHash.delete('requested-reuse-licence.short-name')
+  if metaHash.key?('requested-reuse-licence.short-name')
+    ccCode = metaHash.delete('requested-reuse-licence.short-name')
+    data[:rights] = "https://creativecommons.org/licenses/#{ccCode.sub("CC ", "").downcase}/4.0/"
+  end
   metaHash.key?('funder-name') and data[:grants] = convertFunding(metaHash)
 
   # Context
