@@ -724,6 +724,21 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
       return nil
     end
 
+    # KLUDGE ALERT
+    # 2019-12-16 Martin and Mahjabeen: we need to quickly process all the grant-related updates
+    # from Elements, rather than waiting for all 216,000+ to process. So, let's delay the ones
+    # that don't have any grants info, and then make a cron job to catch up and process the
+    # delayed ones over holiday break.
+    if !d2.key?('grants')
+      puts "Skipping non-grant update."
+
+      # Save the feed; it can later be retried from the command-line
+      savePath = "#{$scriptDir}/holidayUpdates/#{itemID}.feed.xml"
+      FileUtils.mkdir_p(File.dirname(savePath))
+      File.rename("#{$feedTmpDir}/#{feedFile}", savePath)
+      return nil  # content length zero, and HTTP 200 OK
+    end
+
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
 
     # During development, let's re-query the data to see what diffs there might be
