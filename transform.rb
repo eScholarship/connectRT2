@@ -257,7 +257,7 @@ def lookupRepecID(elemPubID)
         :password => ENV['ELEMENTS_API_PASSWORD'] || raise("missing env ELEMENTS_API_PASSWORD") })
     resp.code == 404 and return nil  # sometimes Elements does meta update on non-existent pub, e.g 2577213. Weird.
     resp.code == 410 and return nil  # sometimes Elements does meta update on deleted pub, e.g 2564054. Weird.
-    resp.code == 200 or raise("Got error from Elements API for pub #{elemPubID}: #{resp}")
+    resp.code == 200 or raise("Updated message : Got error from Elements API #{apiHost} for pub #{elemPubID}: #{resp}")
 
     data = Nokogiri::XML(resp.body).remove_namespaces!
     repecID = data.xpath("//record[@source-name='repec']").map{ |r| r['id-at-source'] }.compact[0]
