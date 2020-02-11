@@ -62,7 +62,7 @@ def sendErrorEmail(requestURL, subject, exc)
   htmlBody = textBody.gsub("\n", "<br/>")
   mail = Mail.new do
     from     "eschol@#{`/bin/hostname --fqdn`.strip}"
-    to       "r.c.martin.haye@ucop.edu"
+    to       "r.c.martin.haye@ucop.edu, Mahjabeen.Yucekul@ucop.edu"
     subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} #{subject}"
     text_part do
       content_type 'text/plain; charset=UTF-8'
@@ -93,6 +93,9 @@ end
 # When called from the command line, the program acts as a web server, or can retry a meta update.
 if ARGV.delete('retryMetaUpdate')
   retryMetaUpdate(ARGV)
+  exit 0 # Need to explicitly exit the program so Sinatra doesn't take over.
+elsif ARGV.delete('retryHolidayUpdate')
+  retryHolidayUpdate(ARGV)
   exit 0 # Need to explicitly exit the program so Sinatra doesn't take over.
 else
   # Do nothing and allow Sinatra to take the stage
