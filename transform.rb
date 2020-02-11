@@ -83,6 +83,8 @@ def parseMetadataEntries(feed)
     if key == 'keywords'
       metaHash[key] ||= []
       metaHash[key] << value
+    elsif key == 'proceedings'
+      metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     else
       metaHash.key?(key) and raise("double key #{key}")
       metaHash[key] = value
