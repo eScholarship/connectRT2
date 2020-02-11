@@ -647,6 +647,47 @@ def retryMetaUpdate(qtArks)
 end
 
 ###################################################################################################
+def retryHolidayUpdate(qtArks)
+  qtArks.each do |itemID|
+
+    # Find out the update time of this item in eScholarship
+    itemQuery = %{ item(id: $itemID) { updated } }
+    data = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
+    updatedInEschol = Time.parse(data['updated'])
+    oldFeed = "#{$scriptDir}/holidayUpdates/#{itemID}.feed.xml"
+    updatedInFile = File.mtime(oldFeed)
+
+    if updatedInFile < updatedInEschol
+      puts "Update is out-of-date (file=#{updatedInFile} eschol=#{updatedInEschol})... skipping."
+      outdatedLoc = "#{$scriptDir}/outdatedHolidayUpdates/#{itemID}.feed.xml"
+      FileUtils.mkdir_p(File.dirname(outdatedLoc))
+      File.rename(oldFeed, outdatedLoc)
+      next
+    end
+
+    # Locate the old feed, and put it back in the temp dir for the retry
+    File.exist?(oldFeed) or raise("Can't find #{oldFeed}")
+    feedFile = "feed__#{SecureRandom.hex(20)}.xml"
+    feedPath = "#{$feedTmpDir}/#{feedFile}"
+    FileUtils.cp(oldFeed, feedPath)
+
+    # Read the feed and get it back into a hash
+    rawData = File.open(oldFeed, "r:UTF-8", &:read)
+    feedXML = Nokogiri::XML(rawData, nil, "UTF-8", &:noblanks).remove_namespaces!
+    metaHash = parseMetadataEntries(feedXML)
+
+    # And retry the update
+    processMetaUpdate(nil, itemID, metaHash, feedFile)
+
+    # Done. Clear the old file.
+    fixedLoc = "#{$scriptDir}/retriedHolidayUpdates/#{itemID}.feed.xml"
+    FileUtils.mkdir_p(File.dirname(fixedLoc))
+    puts "Retried; moving to #{fixedLoc}."
+    File.rename(oldFeed, fixedLoc)
+  end
+end
+
+###################################################################################################
 def removeNils(struc)
   if struc.is_a?(Hash)
     out = {}
@@ -722,21 +763,6 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     if diff.empty?
       puts "No anticipated diff; skipping update."
       return nil
-    end
-
-    # KLUDGE ALERT
-    # 2019-12-16 Martin and Mahjabeen: we need to quickly process all the grant-related updates
-    # from Elements, rather than waiting for all 216,000+ to process. So, let's delay the ones
-    # that don't have any grants info, and then make a cron job to catch up and process the
-    # delayed ones over holiday break.
-    if !d2.key?('grants')
-      puts "Skipping non-grant update."
-
-      # Save the feed; it can later be retried from the command-line
-      savePath = "#{$scriptDir}/holidayUpdates/#{itemID}.feed.xml"
-      FileUtils.mkdir_p(File.dirname(savePath))
-      File.rename("#{$feedTmpDir}/#{feedFile}", savePath)
-      return nil  # content length zero, and HTTP 200 OK
     end
 
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
