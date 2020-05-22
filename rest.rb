@@ -748,13 +748,13 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     jsonMeta[:rights] = data['rights']
     #puts "jsonMeta:"; pp jsonMeta
 
-    # We don't generate certain fields on our side
+    # We don't generate certain fields on our side; also filter out keywords since they're basically unused.
     d1 = removeNils(JSON.parse(data.to_json))
-    %w{added pagination permalink source status updated}.each { |key| d1.delete(key) }
+    %w{added pagination permalink source status updated keywords}.each { |key| d1.delete(key) }
 
-    # Certain fields aren't available via an API query
+    # Certain fields aren't available via an API query; also filter out keywords since they're basically unused.
     d2 = removeNils(JSON.parse(jsonMeta.to_json))
-    %w{pubRelation sourceFeedLink sourceID sourceName submitterEmail}.each { |key| d2.delete(key) }
+    %w{pubRelation sourceFeedLink sourceID sourceName submitterEmail keywords}.each { |key| d2.delete(key) }
 
     #puts "\nd1="; pp d1
     #puts "\nd2="; pp d2
