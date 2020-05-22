@@ -622,9 +622,25 @@ end
 ###################################################################################################
 def retryMetaUpdate(qtArks)
   qtArks.each do |itemID|
+    itemStartTime = Time.now
+
+    # Find out the update time of this item in eScholarship
+    itemQuery = %{ item(id: $itemID) { updated } }
+    data = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or halt(404)
+    updatedInEschol = Time.parse(data['updated'])
+    oldFeed = "#{$scriptDir}/failedUpdates/#{itemID}.feed.xml"
+    updatedInFile = File.mtime(oldFeed)
+
+    if updatedInFile < updatedInEschol
+      puts "Update is out-of-date (file=#{updatedInFile} eschol=#{updatedInEschol})... skipping."
+      outdatedLoc = "#{$scriptDir}/outdatedFailedUpdates/#{itemID}.feed.xml"
+      FileUtils.mkdir_p(File.dirname(outdatedLoc))
+      File.rename(oldFeed, outdatedLoc)
+      next
+    end
 
     # Locate the old feed, and put it back in the temp dir for the retry
-    oldFeed = "#{$scriptDir}/failedUpdates/#{itemID}.feed.xml"
+    puts "Processing feed #{oldFeed}."
     File.exist?(oldFeed) or raise("Can't find #{oldFeed}")
     feedFile = "feed__#{SecureRandom.hex(20)}.xml"
     feedPath = "#{$feedTmpDir}/#{feedFile}"
@@ -643,6 +659,13 @@ def retryMetaUpdate(qtArks)
     FileUtils.mkdir_p(File.dirname(fixedLoc))
     puts "Retry successful; moving to #{fixedLoc}."
     File.rename(oldFeed, fixedLoc)
+
+    # Limit the rate of these to 2 per minute.
+    toSleep = 30 - (Time.now - itemStartTime).floor
+    if toSleep > 0
+      puts "Pausing #{toSleep} sec to limit rate."
+      sleep toSleep
+    end
   end
 end
 
