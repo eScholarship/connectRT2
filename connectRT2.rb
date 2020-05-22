@@ -92,6 +92,8 @@ end
 ###################################################################################################
 # When called from the command line, the program acts as a web server, or can retry a meta update.
 if ARGV.delete('retryMetaUpdate')
+  # Run it this way:
+  # cd ~/subi/connectRT2 && source config/env.sh && ls failedUpdates/ | extract 'qt\w{8}' | xargs bundle exec ruby connectRT2.rb retryMetaUpdate
   retryMetaUpdate(ARGV)
   exit 0 # Need to explicitly exit the program so Sinatra doesn't take over.
 elsif ARGV.delete('retryHolidayUpdate')
