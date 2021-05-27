@@ -57,7 +57,7 @@ end
 ###################################################################################################
 def convertPubType(pubTypeStr)
   case pubTypeStr
-    when %r{^(journal-article|conference|conference-proceeding|internet-publication|scholarly-edition|report)$}; 'ARTICLE'
+    when %r{^(journal-article|conference|conference-proceeding|internet-publication|scholarly-edition|report|preprint)$}; 'ARTICLE'
     when %r{^(dataset|poster|media|presentation|other)$}; 'NON_TEXTUAL'
     when "book"; 'MONOGRAPH'
     when "chapter"; 'CHAPTER'
@@ -288,6 +288,9 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   data[:type] = convertPubType(elementsPubType)
   data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
+  if (elementsPubType == 'preprint')  
+    data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
+  end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   data[:embargoExpires] = assignEmbargo(metaHash)
 
@@ -327,7 +330,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?("proceedings") and data[:proceedings] = metaHash.delete("proceedings")
   metaHash.key?("volume") and data[:volume] = metaHash.delete("volume")
   metaHash.key?("issue") and data[:issue] = metaHash.delete("issue")
-  metaHash.key?("parent-title") and data[:bookTitle] = metaHash.delete("parent-title")  # for chapters
+  metaHash.key?("parent-title") and data[:bookTitle] = metaHash.delete("parent-title")  # for chapters 
   metaHash.key?("oa-location-url") and convertOALocation(ark, metaHash, data)
   data[:ucpmsPubType] = elementsPubType
 
