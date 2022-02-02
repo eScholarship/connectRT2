@@ -197,8 +197,11 @@ end
 ###################################################################################################
 def convertFunding(metaHash)
   funderNames = metaHash.delete("funder-name").split("|")
-  funderIds   = metaHash.delete("funder-reference").split("|")
-  return funderNames.map.with_index { |name, idx| { reference: funderIds[idx], name: name } }
+  funderIds   = metaHash.delete("funder-reference")&.split("|")
+  if funderIds.nil?
+     return nil
+  end 
+  return funderNames.map.with_index { |name, idx| { reference: funderIds[idx], name: name } }.select{|r| r[:reference] != nil and !r[:reference].empty?}
 end
 
 ###################################################################################################
