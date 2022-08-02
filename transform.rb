@@ -107,8 +107,13 @@ end
 ###################################################################################################
 def convertFileVersion(fileVersion)
   case fileVersion
+    # Pre-v6.8 terms
     when /(Author final|Submitted) version/; 'AUTHOR_VERSION'
     when "Published version"; 'PUBLISHER_VERSION'
+    # Post-v6.8 terms
+    when /(Publisher's|Published) version/; 'PUBLISHER_VERSION'
+    when /(Accepted|Submitted) version*/,
+         "Author's accepted manuscript";'AUTHOR_VERSION'
     else raise "Unrecognized file version '#{fileVersion}'"
   end
 end
@@ -207,9 +212,9 @@ end
 ###################################################################################################
 def convertOALocation(ark, metaHash, data)
   loc = metaHash.delete("oa-location-url")
-  if loc =~ %r{ucelinks.cdlib.org}
+  if loc =~ %r{search.library.(berkeley|ucla|ucr|ucr|ucsb|ucsf).edu} or loc =~ %r{primo.exlibrisgroup.com} or loc ~= %r{search-library.ucsd.edu}
     userErrorHalt(ark, "The link you provided may not be accessible to readers outside of UC. \n" +
-                       "Please provide a link to an open access version of this article.")
+    "Please provide a link to an open access version of this article.")
   end
   if loc =~ %r{escholarship.org}
     userErrorHalt(ark, "The link you provided is to an existing eScholarship item. \n" +
