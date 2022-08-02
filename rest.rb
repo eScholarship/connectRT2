@@ -916,7 +916,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
 
   # Now stuff it into the metadata
   mimeType = guessMimeType(fileName)
-  if fileVersion == "Supporting information"
+  if fileVersion == "Supporting information" || fileVersion == "Supplemental file"
     # Supplemental file(s)
     info[:meta][:suppFiles] ||= []
     info[:meta][:suppFiles] << { file: fileName, contentType: mimeType, size: size,
@@ -934,8 +934,13 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     info[:meta][:contentFileName] = fileName
     if fileVersion
       info[:meta][:contentVersion] = case fileVersion
-        when /(Accepted|Submitted) version/; 'AUTHOR_VERSION'
+        # Pre-v6.8 terms
+        when /(Author final|Submitted) version/; 'AUTHOR_VERSION'
         when "Published version"; 'PUBLISHER_VERSION'
+        # Post-v6.8 terms
+        when /(Publisher's|Published) version/; 'PUBLISHER_VERSION'
+        when /(Accepted|Submitted) version*/,
+             "Author's accepted manuscript";'AUTHOR_VERSION'
         else raise("unrecognized fileVersion #{fileVersion.inspect}")
       end
     end
