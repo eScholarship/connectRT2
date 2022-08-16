@@ -210,9 +210,11 @@ def convertFunding(metaHash)
 end
 
 ###################################################################################################
+
+
 def convertOALocation(ark, metaHash, data)
   loc = metaHash.delete("oa-location-url")
-  if loc =~ %r{search.library.(berkeley|ucla|ucr|ucr|ucsb|ucsf).edu} or loc =~ %r{primo.exlibrisgroup.com} or loc ~= %r{search-library.ucsd.edu}
+  if loc =~ %r{search.library.(berkeley|ucla|ucr|ucdavis|ucsb|ucsf).edu} or loc =~ %r{primo.exlibrisgroup.com} or loc =~ %r{search-library.ucsd.edu}
     userErrorHalt(ark, "The link you provided may not be accessible to readers outside of UC. \n" +
     "Please provide a link to an open access version of this article.")
   end
@@ -345,6 +347,16 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # History
   data[:published] = convertPubDate(metaHash.delete('publication-date'))
   data[:submitterEmail] = submitterEmail
+
+
+  # Devin -- move to santize.rb eventually
+  def sanitizeCitaiton(htmlCitation)
+    htmlFragment.nil? and return   
+  end
+
+
+  # Devin custom citation test
+  metaHash.key?("custom-citation") and data[:customCitation] = metaHash.delete("custom-citation")
 
   # All done.
   return data
