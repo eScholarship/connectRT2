@@ -348,14 +348,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:published] = convertPubDate(metaHash.delete('publication-date'))
   data[:submitterEmail] = submitterEmail
 
-
-  # Devin -- move to santize.rb eventually
-  def sanitizeCitaiton(htmlCitation)
-    htmlFragment.nil? and return   
-  end
-
-
-  # Devin custom citation test
+  # Custom Citation Field
   metaHash.key?("custom-citation") and data[:customCitation] = metaHash.delete("custom-citation")
 
   # All done.
