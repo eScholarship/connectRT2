@@ -28,7 +28,8 @@ $groupToCampus = { 684 => 'lbnl',
                    282 => 'ucsd',
                    2   => 'ucsf',
                    286 => 'ucsb',
-                   280 => 'ucsc' }
+                   280 => 'ucsc',
+                   1164 => 'ucop' }
 
 $groupToRGPO = { 784 => 'CBCRP',
                  785 => 'CHRP',
