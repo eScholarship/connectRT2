@@ -377,7 +377,9 @@ def transformPeople(pieces, role)
         if !person[:nameParts][:fname] || person[:nameParts][:fname].size < value.size
           person[:nameParts][:fname] = value
         end
-      when 'email-address', 'resolved-user-email'
+      # Fix for filtering non-UC author emails
+      # when 'email-address', 'resolved-user-email'
+      when 'resolved-user-email'
         person[:email] = value
       when 'resolved-user-orcid'
         person[:orcid] = value
