@@ -384,10 +384,8 @@ def transformPeople(pieces, role)
         person[:orcid] = value
       when 'identifier'
         #puts "TODO: Handle identifiers like #{value.inspect}"
-        # puts("Identifier found. #{value}")
         if value.include? "(orcid)"
-          orcidid = value.split[0]
-          # puts("orcid found: #{orcidid}")
+          # Orcids passed as: "xxxx-xxxx-xxxx-xxxx (orcid)" 
           person[:orcid] = value.split[0]
         end
       when 'end-person'
