@@ -29,6 +29,7 @@ $groupToCampus = { 684 => 'lbnl',
                    2   => 'ucsf',
                    286 => 'ucsb',
                    280 => 'ucsc',
+                   1254 => 'anrcs',
                    1164 => 'ucop' }
 
 $groupToRGPO = { 784 => 'CBCRP',
@@ -127,6 +128,7 @@ def assignSeries(data, completionDate, metaHash)
   # In general we want to retain existing units. Grab a list of those first.
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
+  puts("Units: #{data[:units]}")
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
@@ -141,6 +143,10 @@ def assignSeries(data, completionDate, metaHash)
     pair =~ /^(\d+):(.*)$/ or raise("can't parse group pair #{pair.inspect}")
     [$1.to_i, $2]
   }]
+  
+  # devin tk
+  # puts("groups: #{groups}")
+  
   rgpoUnits = Set.new
   campusSeries = groups.map { |groupID, groupName|
 
@@ -166,11 +172,17 @@ def assignSeries(data, completionDate, metaHash)
 
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
+  ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
+  # puts("rgpoPat: #{rgpoPat}")
+  # old sort: a.sub('lbnl','0').sub(rgpoPat,'zz') <=> b.sub('lbnl','0').sub(rgpoPat,'zz')
   campusSeries.sort { |a, b|
-    a.sub('lbnl','0').sub(rgpoPat,'zz') <=> b.sub('lbnl','0').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
   }.each { |s|
     series.key?(s) or series[s] = true
   }
+
+  # Devin TK debug
+  # puts("TK campusSeries: #{campusSeries}")
 
   # Figure out which departments correspond to which Elements groups.
   # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
@@ -186,8 +198,16 @@ def assignSeries(data, completionDate, metaHash)
   # Add department series in sorted order (and avoid dupes)
   deptSeries.sort.each { |s| series.key?(s) or series[s] = true }
 
-  # All done.
-  return data[:units] = series.keys
+  # Re-sort the series keys before passing
+  seriesKeys = series.keys
+  seriesKeys = seriesKeys.sort { |a, b| 
+    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
+  }
+
+  # Devin TK debug
+  # puts("TK seriesKeys: #{seriesKeys}")
+
+  return data[:units] = seriesKeys
 end
 
 ###################################################################################################
