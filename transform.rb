@@ -398,9 +398,11 @@ def transformPeople(pieces, role)
           person[:nameParts][:fname] = value
         end
       # Fix for filtering non-UC author emails
-      # when 'email-address', 'resolved-user-email'
       when 'resolved-user-email'
         person[:email] = value
+      when 'email-address'
+        # Older version of above
+        # do nothing for now.
       when 'resolved-user-orcid'
         person[:orcid] = value
       when 'identifier'
