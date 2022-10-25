@@ -935,7 +935,7 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     if fileVersion
       info[:meta][:contentVersion] = case fileVersion
         # Pre-v6.8 terms
-        when /(Author final|Submitted) version/; 'AUTHOR_VERSION'
+        when /(Author's final|Submitted) version/; 'AUTHOR_VERSION'
         when "Published version"; 'PUBLISHER_VERSION'
         # Post-v6.8 terms
         when /(Publisher's|Published) version/; 'PUBLISHER_VERSION'
