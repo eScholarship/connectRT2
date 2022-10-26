@@ -110,7 +110,7 @@ end
 def convertFileVersion(fileVersion)
   case fileVersion
     # Pre-v6.8 terms
-    when /(Author final|Submitted) version/; 'AUTHOR_VERSION'
+    when /(Author's final|Submitted) version/; 'AUTHOR_VERSION'
     when "Published version"; 'PUBLISHER_VERSION'
     # Post-v6.8 terms
     when /(Publisher's|Published) version/; 'PUBLISHER_VERSION'
@@ -345,8 +345,10 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))
   if metaHash.key?('requested-reuse-licence.short-name')
-    ccCode = metaHash.delete('requested-reuse-licence.short-name')
-    data[:rights] = "https://creativecommons.org/licenses/#{ccCode.sub("CC ", "").downcase}/4.0/"
+    if metaHash['requested-reuse-licence.short-name'] != "No Licence"
+      ccCode = metaHash.delete('requested-reuse-licence.short-name')
+      data[:rights] = "https://creativecommons.org/licenses/#{ccCode.sub("CC ", "").downcase}/4.0/"
+    end
   end
   metaHash.key?('funder-name') and data[:grants] = convertFunding(metaHash)
 
