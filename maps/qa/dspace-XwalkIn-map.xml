@@ -1,0 +1,546 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xwalkin:consolidated-maps xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.symplectic.co.uk/elements/xwalkin ../../schemas/XwalkIn.xsd" xmlns:xwalkin="http://www.symplectic.co.uk/elements/xwalkin" xmlns:xwalk="http://www.symplectic.co.uk/elements/xwalkcommon">
+  <xwalk:parameters>
+    <xwalk:parameter name="default-currency" value="money:usd" />
+    <xwalk:parameter name="default-date-format" value="date:YYYY-MM-DD" />
+    <xwalk:parameter name="default-date-delimiter" value="-" />
+    <xwalk:parameter name="default-person-format" value="person:lastname-firstnames" />
+    <xwalk:parameter name="default-pagination-format" value="pagination:start-end" />
+    <xwalk:parameter name="default-pagination-delimiter" value="-" />
+    <xwalk:parameter name="use-leading-zeroes-for-dates" value="true" />
+    <xwalk:parameter name="xwalkin-without-files" value="false" />
+    <xwalk:parameter name="xwalkin-without-file-urls" value="false" />
+    <xwalk:parameter name="dspace-xwalkin-public-access-group-ids" value="0" />
+  </xwalk:parameters>
+  <xwalk:elements-metadata>
+    <xwalk:category name="publication">
+      <xwalk:field name="abstract" type="text" />
+      <xwalk:field name="acceptance-date" type="date" />
+      <xwalk:field name="addresses" type="address-list" />
+      <xwalk:field name="are-files-confidential" type="boolean" />
+      <xwalk:field name="associated-authors" type="person-list" />
+      <xwalk:field name="author-licence" type="choice" />
+      <xwalk:field name="authors" type="person-list" />
+      <xwalk:field name="author-url" type="url" />
+      <xwalk:field name="c-consider-for-herdc" type="boolean" />
+      <xwalk:field name="collections" type="list" />
+      <xwalk:field name="commissioning-body" type="text" />
+      <xwalk:field name="confidential" type="boolean" />
+      <xwalk:field name="confidential-files-reason" type="text" />
+      <xwalk:field name="doi" type="doi" />
+      <xwalk:field name="oa-location-url" type="text" />
+      <xwalk:field name="edition" type="text" />
+      <xwalk:field name="editors" type="person-list" />
+      <xwalk:field name="eissn" type="issn" />
+      <xwalk:field name="embargo-release-date" type="date" />
+      <xwalk:field name="external-identifiers" type="identifier-list" />
+      <xwalk:field name="filed-date" type="date" />
+      <xwalk:field name="finish-date" type="date" />
+      <xwalk:field name="funding-acknowledgements" type="funding-acknowledgements" />
+      <xwalk:field name="isbn-10" type="isbn-10" />
+      <xwalk:field name="isbn-13" type="isbn-13" />
+      <xwalk:field name="is-embargoed" type="boolean" />
+      <xwalk:field name="is-open-access" type="boolean" />
+      <xwalk:field name="issn" type="issn" />
+      <xwalk:field name="issue" type="text" />
+      <xwalk:field name="journal" type="text" />
+      <xwalk:field name="keywords" type="keyword-list" />
+      <xwalk:field name="language" type="text" />
+      <xwalk:field name="location" type="text" />
+      <xwalk:field name="medium" type="text" />
+      <xwalk:field name="name-of-conference" type="text" />
+      <xwalk:field name="notes" type="text" />
+      <xwalk:field name="number" type="text" />
+      <xwalk:field name="number-of-pieces" type="text" />
+      <xwalk:field name="online-publication-date" type="date" />
+      <xwalk:field name="pagination" type="pagination" />
+      <xwalk:field name="parent-title" type="text" />
+      <xwalk:field name="patent-number" type="text" />
+      <xwalk:field name="patent-status" type="text" />
+      <xwalk:field name="pii" type="text" />
+      <xwalk:field name="place-of-publication" type="text" />
+      <xwalk:field name="public-url" type="url" />
+      <xwalk:field name="publication-date" type="date" />
+      <xwalk:field name="publication-status" type="choice" />
+      <xwalk:field name="publisher" type="text" />
+      <xwalk:field name="publisher-licence" type="choice" />
+      <xwalk:field name="publisher-url" type="url" />
+      <xwalk:field name="record-created-at-source-date" type="date" />
+      <xwalk:field name="record-made-public-at-source-date" type="date" />
+      <xwalk:field name="references" type="list" />
+      <xwalk:field name="repository-status" type="choice" />
+      <xwalk:field name="series" type="text" />
+      <xwalk:field name="start-date" type="date" />
+      <xwalk:field name="thesis-type" type="choice" />
+      <xwalk:field name="title" type="text" />
+      <xwalk:field name="types" type="list" />
+      <xwalk:field name="version" type="text" />
+      <xwalk:field name="volume" type="text" />
+    </xwalk:category>
+  </xwalk:elements-metadata>
+  <xwalk:field-maps>
+    <xwalk:field-map name="import-eschol-article">
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
+                Journal Article:
+
+                Essential:
+                title
+                authors
+                journal
+                abstract
+                keywords
+                publisher*
+                date of acceptence**
+                online publication date**
+
+                Optional:
+                DOI
+                publication date
+                ISSN
+                eISSN**
+                volume
+                issue
+                LBL report number***
+                pagination*
+                url for publisher's version of article**
+
+                * not currently available through API
+                ** no equivalent value in eSchol
+                *** not exactly sure how to pass this through
+            -->
+      <xwalk:field-mapping to="title">
+        <xwalk:field-source from="/item/metadata/title" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="authors">
+        <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="journal">
+        <xwalk:field-source from="/item/metadata/journal" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="abstract">
+        <xwalk:field-source from="/item/metadata/abstract" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="keywords">
+        <xwalk:field-source from="/item/metadata/keywords" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="doi">
+        <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" prefix="ark:/13030/" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publication-date">
+        <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="issn">
+        <xwalk:field-source from="/item/metadata/issn" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="volume">
+        <xwalk:field-source from="/item/metadata/volume" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="issue">
+        <xwalk:field-source from="/item/metadata/issue" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="pagination">
+        <xwalk:field-source from="/item/metadata/pagination" format="pagination:start-end" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="embargo-release-date">
+        <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="public-url">
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-created-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-made-public-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+    </xwalk:field-map>
+    <xwalk:field-map name="import-eschol-chapter">
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
+                Chapter:
+
+                Essential:
+                book title
+                chapter title
+                chapter number**
+                pagination
+                edition**
+                volume**
+                authors
+                editors
+                abstract
+                keywords
+                online publication date**
+
+                Optional:
+                DOI
+                publication date
+                ISBN-10
+                ISBN-13
+                publisher
+                publisher url**
+                place of publication**
+
+                * not currently available through API
+                ** no equivalent value in eSchol
+            -->
+      <xwalk:field-mapping to="title">
+        <xwalk:field-source from="/item/metadata/title" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="parent-title">
+        <xwalk:field-source from="/item/metadata/bookTitle" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="pagination">
+        <xwalk:field-source from="/item/metadata/pagination" format="pagination:start-end" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="authors">
+        <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="editors">
+        <xwalk:field-source from="/item/metadata/contributors/nodes[role/text()='EDITOR']" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="abstract">
+        <xwalk:field-source from="/item/metadata/abstract" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="keywords">
+        <xwalk:field-source from="/item/metadata/keywords" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="doi">
+        <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publication-date">
+        <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publisher">
+        <xwalk:field-source from="/item/metadata/publisher" select-using="xpath" />
+      </xwalk:field-mapping>
+      <!-- really should try to differentiate 10 and 13 -->
+      <xwalk:field-mapping to="isbn-10">
+        <xwalk:field-source from="/item/metadata/isbn" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="embargo-release-date">
+        <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="public-url">
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-created-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-made-public-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+    </xwalk:field-map>
+    <xwalk:field-map name="import-eschol-monograph">
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
+                Monograph:
+
+                Essential:
+                title
+                edition**
+                volume**
+                authors
+                editors
+                abstract
+                keywords
+                online publication date**
+
+                Optional:
+                DOI
+                publication date
+                ISBN-10*
+                ISBN-13*
+                publisher*
+                publisher url**
+                place of publication**
+
+                * not currently available through API
+                ** no equivalent value in eSchol
+            -->
+      <xwalk:field-mapping to="title">
+        <xwalk:field-source from="/item/metadata/title" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="authors">
+        <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="editors">
+        <xwalk:field-source from="/item/metadata/contributors/nodes[role/text()='EDITOR']" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="abstract">
+        <xwalk:field-source from="/item/metadata/abstract" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="keywords">
+        <xwalk:field-source from="/item/metadata/keywords" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="doi">
+        <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publication-date">
+        <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publisher">
+        <xwalk:field-source from="/item/metadata/publisher" select-using="xpath" />
+      </xwalk:field-mapping>
+      <!-- really should try to differentiate 10 and 13 -->
+      <xwalk:field-mapping to="isbn-10">
+        <xwalk:field-source from="/item/metadata/isbn" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="embargo-release-date">
+        <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="public-url">
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-created-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-made-public-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+    </xwalk:field-map>
+    <xwalk:field-map name="import-eschol-etd">
+      <!--x-newline-placeholder-93f54526-c9a8-4843-baf5-e77550b3dd9f
+                Theses/Dissertation:
+
+                Essential:
+                thesis type**
+                title
+                abstract
+                authors
+                author url**
+                publisher url**
+                supervisors
+                presented at**
+                date submitted**
+                date awarded**
+                keywords
+                notes**
+                addresses**
+                * not currently available through API
+                ** no equivalent value in eSchol
+            -->
+      <xwalk:field-mapping to="title">
+        <xwalk:field-source from="/item/metadata/title" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="abstract">
+        <xwalk:field-source from="/item/metadata/abstract" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="authors">
+        <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="editors">
+        <xwalk:field-source from="/item/metadata/contributors/nodes[role/text()='ADVISOR']" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="keywords">
+        <xwalk:field-source from="/item/metadata/keywords" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="filed-date">
+        <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="embargo-release-date">
+        <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="public-url">
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-created-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-made-public-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+    </xwalk:field-map>
+    <xwalk:field-map name="import-eschol-default">
+      <xwalk:field-mapping to="title">
+        <xwalk:field-source from="/item/metadata/title" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="authors">
+        <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <!-- will have to tweak this to get editors -->
+      <xwalk:field-mapping to="associated-authors">
+        <xwalk:field-source from="/item/metadata/contributors/nodes" select-using="xpath">
+          <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+          <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+          <xwalk:field-source data-part="person:address">
+            <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
+          </xwalk:field-source>
+          <xwalk:field-source from="nodes/email/text()" select-using="xpath" data-part="person:email-address" />
+          <xwalk:field-source data-part="person:identifier">
+            <xwalk:field-source from="nodes/orcid/text()" select-using="xpath" data-part="identifier:value" />
+            <xwalk:field-source value="orcid" data-part="identifier:scheme" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="abstract">
+        <xwalk:field-source from="/item/metadata/abstract" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="keywords">
+        <xwalk:field-source from="/item/metadata/keywords" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="doi">
+        <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="oa-location-url">
+        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="c-eschol-id">
+        <xwalk:field-source from="/item/metadata/id" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="publish-date">
+        <xwalk:field-source from="/item/metadata/published" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="embargo-release-date">
+        <xwalk:field-source from="/item/metadata/embargoExpires" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="public-url">
+        <xwalk:field-source from="/item/metadata/permalink" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-created-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="record-made-public-at-source-date">
+        <xwalk:field-source from="/item/metadata/added" select-using="xpath" />
+      </xwalk:field-mapping>
+    </xwalk:field-map>
+  </xwalk:field-maps>
+  <xwalk:value-maps />
+  <xwalkin:object-type-selector>
+    <xwalk:choose>
+      <xwalk:when>
+        <xwalk:condition operator="equals" argument-field="/item/metadata/type" select-using="xpath">ARTICLE</xwalk:condition>
+        <xwalk:result>
+          <xwalkin:object-type-selection object-type="journal-article" category="publication" field-map="import-eschol-article" />
+        </xwalk:result>
+      </xwalk:when>
+      <xwalk:when>
+        <xwalk:condition operator="equals" argument-field="/item/metadata/type" select-using="xpath">CHAPTER</xwalk:condition>
+        <xwalk:result>
+          <xwalkin:object-type-selection object-type="chapter" category="publication" field-map="import-eschol-chapter" />
+        </xwalk:result>
+      </xwalk:when>
+      <xwalk:when>
+        <xwalk:condition operator="equals" argument-field="/item/metadata/type" select-using="xpath">ETD</xwalk:condition>
+        <xwalk:result>
+          <xwalkin:object-type-selection object-type="thesis-dissertation" category="publication" field-map="import-eschol-etd" />
+        </xwalk:result>
+      </xwalk:when>
+      <xwalk:when>
+        <xwalk:condition operator="equals" argument-field="/item/metadata/type" select-using="xpath">MONOGRAPH</xwalk:condition>
+        <xwalk:result>
+          <xwalkin:object-type-selection object-type="book" category="publication" field-map="import-eschol-monograph" />
+        </xwalk:result>
+      </xwalk:when>
+      <xwalk:otherwise>
+        <xwalk:result>
+          <xwalkin:object-type-selection object-type="other" category="publication" field-map="import-eschol-default" />
+        </xwalk:result>
+      </xwalk:otherwise>
+    </xwalk:choose>
+  </xwalkin:object-type-selector>
+</xwalkin:consolidated-maps>

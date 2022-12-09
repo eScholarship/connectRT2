@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
+  <rel:category name="publication">
+    <rel:masks>
+      <rel:mask name="default">
+        <rel:inspect-object>
+          <rel:if>
+            <!-- Note: had to use logic expression for the test below, since the normal 
+                 <rel:exclude-objects-without-source> isn't capable of lumping verified and 
+                 non-verified manual records together -->
+            <rel:condition operator="not">
+              <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace</rel:condition>
+            </rel:condition>
+            <rel:result>
+              <rel:mask-object />
+            </rel:result>
+          </rel:if>
+        </rel:inspect-object>
+        <!-- MH note: if one excludes source "dspace" below, no pushes ever go to eschol. 
+                      It's a handy way to turn on/off metadata updates :) 
+        -->
+        <!--<rel:exclude-sources>
+          <rel:source name="dspace" />
+        </rel:exclude-sources>-->
+      </rel:mask>
+    </rel:masks>
+    <rel:hash-definitions>
+      <rel:hash-definition name="default">
+        <rel:value from="title" />
+        <rel:value from="authors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+        </rel:value>
+        <rel:value from="parent-title" />
+        <rel:value from="abstract" />
+        <rel:value from="editors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+        </rel:value>
+        <rel:value from="publisher" />
+        <rel:value from="publication-status" />
+        <rel:value from="publication-date" />
+        <rel:value from="isbn-10" />
+        <rel:value from="isbn-13" />
+        <rel:value from="issn" />
+        <rel:value from="eissn" />
+        <rel:value from="journal" />
+        <rel:value from="volume" />
+        <rel:value from="issue" />
+        <rel:value from="pagination" />
+        <rel:value from="doi" />
+        <rel:value from="number" />
+        <rel:value from="object.labels" />
+        <rel:link-types>
+          <rel:link-type name="publication-user-authorship" />
+          <rel:link-type name="publication-grant-funded" />
+        </rel:link-types>
+      </rel:hash-definition>
+    </rel:hash-definitions>
+    <rel:relevance-definition-selector>
+      <rel:relevance-definition-selection mask="default" hash-definition="default" />
+    </rel:relevance-definition-selector>
+  </rel:category>
+</rel:xml-relevance-scheme>
