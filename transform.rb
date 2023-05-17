@@ -323,7 +323,9 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
   if (elementsPubType == 'preprint' ||
      (elementsPubType == 'journal-article' &&
-       (elementsPubStatus == 'In preparation' || elementsPubStatus == 'Accepted' || elementsPubStatus == 'Submitted' || elementsPubStatus == 'Unpublished') ) )  
+       (elementsPubStatus == 'In preparation' ||
+        elementsPubStatus == 'Submitted' ||
+        elementsPubStatus == 'Unpublished') ) )  
     data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
   end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
