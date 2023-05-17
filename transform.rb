@@ -318,9 +318,14 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
+  elementsPubStatus = metaHash['publication-status'] || raise("missing publication-status")
   data[:type] = convertPubType(elementsPubType)
   data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
-  if (elementsPubType == 'preprint')  
+  if (elementsPubType == 'preprint' ||
+     (elementsPubType == 'journal-article' &&
+       (elementsPubStatus == 'In preparation' ||
+        elementsPubStatus == 'Submitted' ||
+        elementsPubStatus == 'Unpublished') ) )  
     data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
   end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))

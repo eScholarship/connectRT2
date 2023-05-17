@@ -15,3 +15,6 @@ tmp/
 *.out
 *.pid
 *.sql_log
+failedUpdates/
+holidayUpdates/
+outdatedFailedUpdates/
