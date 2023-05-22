@@ -68,6 +68,26 @@ def convertPubType(pubTypeStr)
 end
 
 ###################################################################################################
+def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
+
+  # if elementsIsReviewed == 1
+  #   return(true)
+  # elsif elementsIsReviewed == 0 || elementsIsReviewed == nil
+  #   return(false)
+  # end
+
+  # Accepted and published journal articles default to true
+  if (elementsPubtype == "journal-article" && 
+    (elementsPubStatus == "Accepted" ||
+      elementsPubStatus == "Published" ||
+      elementsPubStatus == "Published online") )
+    return(true)
+  else # All other publication types default to false
+    return(false)
+  end
+end
+
+###################################################################################################
 def convertKeywords(kws)
   # Transform "1505 Marketing (for)" to just "Marketing"
   kws.map { |kw|
@@ -318,16 +338,10 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
-  elementsPubStatus = metaHash['publication-status']
+  elementsPubStatus = metaHash['publication-status'] || nil
+  data[:isPeerReviewed] = getDefaultPeerReview(elementsPubType,elementsPubStatus)
+  
   data[:type] = convertPubType(elementsPubType)
-  data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
-  if (elementsPubType == 'preprint' ||
-     (elementsPubType == 'journal-article' &&
-       (elementsPubStatus == 'In preparation' ||
-        elementsPubStatus == 'Submitted' ||
-        elementsPubStatus == 'Unpublished') ) )  
-    data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
-  end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   data[:embargoExpires] = assignEmbargo(metaHash)
 
