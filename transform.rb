@@ -70,21 +70,41 @@ end
 ###################################################################################################
 def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
-  # if elementsIsReviewed == 1
-  #   return(true)
-  # elsif elementsIsReviewed == 0 || elementsIsReviewed == nil
-  #   return(false)
-  # end
+  # Journal articles
+  if elementsPubtype == "journal-article"
 
-  # Accepted and published journal articles default to true
-  if (elementsPubtype == "journal-article" && 
-    (elementsPubStatus == "Accepted" ||
-      elementsPubStatus == "Published" ||
-      elementsPubStatus == "Published online") )
-    return(true)
-  else # All other publication types default to false
-    return(false)
+    # If they HAVEN'T sepcified T/F, 
+    if elementsIsReviewed == nil
+
+      # Accepted & published works are "true", all others false
+      if (elementsPubStatus == "Accepted" ||
+        elementsPubStatus == "Published" ||
+        elementsPubStatus == "Published online")
+        return(true)
+      else
+        return(false)
+
+    # If they HAVE specified T/F, use that value
+    else
+      if elementsIsReviewed == 1
+        return(true)
+      else
+        return(false)
+      end
+
+    end
+
+  # All other pub types: Use the specified value, null = false.
+  # The user can edit this with a manual record if they want to.
+  else
+    if elementsIsReviewed == 1
+      return(true)
+    elsif elementsIsReviewed == 0 || elementsIsReviewed == nil
+      return(false)
+    end
+
   end
+
 end
 
 ###################################################################################################
@@ -339,8 +359,10 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   elementsPubStatus = metaHash['publication-status'] || nil
-  data[:isPeerReviewed] = getDefaultPeerReview(elementsPubType,elementsPubStatus)
+  elementsIsReviewed = metaHash['is-reviewed'] || nil
   
+  data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
+
   data[:type] = convertPubType(elementsPubType)
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   data[:embargoExpires] = assignEmbargo(metaHash)
