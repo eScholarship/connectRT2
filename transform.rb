@@ -69,9 +69,9 @@ end
 
 ###################################################################################################
 def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
-
+   
   # Journal articles
-  if elementsPubtype == "journal-article"
+  if elementsPubType == "journal-article"
 
     # If they HAVEN'T sepcified T/F, 
     if elementsIsReviewed == nil
@@ -83,10 +83,11 @@ def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
         return(true)
       else
         return(false)
+      end
 
     # If they HAVE specified T/F, use that value
     else
-      if elementsIsReviewed == 1
+      if elementsIsReviewed == "true"
         return(true)
       else
         return(false)
@@ -97,10 +98,10 @@ def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
   # All other pub types: Use the specified value, null = false.
   # The user can edit this with a manual record if they want to.
   else
-    if elementsIsReviewed == 1
-      return(true)
-    elsif elementsIsReviewed == 0 || elementsIsReviewed == nil
+    if (elementsIsReviewed == nil || elementsIsReviewed == "false")
       return(false)
+    else
+      return(true)
     end
 
   end
