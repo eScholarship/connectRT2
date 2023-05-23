@@ -70,40 +70,28 @@ end
 ###################################################################################################
 def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
    
-  # Journal articles
-  if elementsPubType == "journal-article"
+  # If elementsIsReveiewed nil is considered false
+  peerReviewBool = (elementsIsReviewed == "true")? true : false
+  # print "PRBool check: "
+  # puts peerReviewBool
 
-    # If they HAVEN'T sepcified T/F, 
-    if elementsIsReviewed == nil
+  # If it's an article without a specified "is reviewed"
+  if (elementsPubType == "journal-article" && elementsIsReviewed == nil)
 
-      # Accepted & published works are "true", all others false
-      if (elementsPubStatus == "Accepted" ||
-        elementsPubStatus == "Published" ||
-        elementsPubStatus == "Published online")
-        return(true)
-      else
-        return(false)
-      end
-
-    # If they HAVE specified T/F, use that value
+    # Accepted & published works are "true", all others false
+    if (elementsPubStatus == "Accepted" ||
+      elementsPubStatus == "Published" ||
+      elementsPubStatus == "Published online")
+      return(true)
     else
-      if elementsIsReviewed == "true"
-        return(true)
-      else
-        return(false)
-      end
-
+      return(false)
     end
 
-  # All other pub types: Use the specified value, null = false.
+  # All other pub types (incl. articles w/ specified "is reviewed") 
+  # Use the specified value, null = false.
   # The user can edit this with a manual record if they want to.
   else
-    if (elementsIsReviewed == nil || elementsIsReviewed == "false")
-      return(false)
-    else
-      return(true)
-    end
-
+    return(peerReviewBool)
   end
 
 end
