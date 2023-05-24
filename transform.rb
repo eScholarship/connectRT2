@@ -72,8 +72,6 @@ def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
    
   # If elementsIsReveiewed nil is considered false
   peerReviewBool = (elementsIsReviewed == "true")? true : false
-  # print "PRBool check: "
-  # puts peerReviewBool
 
   # If it's an article without a specified "is reviewed"
   if (elementsPubType == "journal-article" && elementsIsReviewed == nil)
@@ -173,9 +171,6 @@ def assignSeries(data, completionDate, metaHash)
     [$1.to_i, $2]
   }]
   
-  # devin tk
-  # puts("groups: #{groups}")
-  
   rgpoUnits = Set.new
   campusSeries = groups.map { |groupID, groupName|
 
@@ -210,10 +205,7 @@ def assignSeries(data, completionDate, metaHash)
     series.key?(s) or series[s] = true
   }
 
-  # Devin TK debug
-  # puts("TK campusSeries: #{campusSeries}")
-
-  # Figure out which departments correspond to which Elements groups.
+  # Figures out which departments correspond to which Elements groups.
   # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
   # Note: departments always come after campus
   depts = Hash[DB.fetch("""SELECT id unit_id, attrs->>'$.elements_id' elements_id FROM units
@@ -232,9 +224,6 @@ def assignSeries(data, completionDate, metaHash)
   seriesKeys = seriesKeys.sort { |a, b| 
     a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
   }
-
-  # Devin TK debug
-  # puts("TK seriesKeys: #{seriesKeys}")
 
   return data[:units] = seriesKeys
 end
@@ -348,7 +337,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # Object type, flags, status, etc.
   elementsPubType = metaHash.delete('object.type') || raise("missing object.type")
   elementsPubStatus = metaHash['publication-status'] || nil
-  elementsIsReviewed = metaHash['is-reviewed'] || nil
+  elementsIsReviewed = metaHash.delete('is-reviewed') || nil
   
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 

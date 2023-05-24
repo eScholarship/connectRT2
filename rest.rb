@@ -922,7 +922,14 @@ post "/dspace-rest/items/:itemGUID/bitstreams" do |shortArk|
     info[:meta][:suppFiles] << { file: fileName, contentType: mimeType, size: size,
                                  fetchLink: "#{$submitServer}/bitstreamTmp/#{tmpFile}" }
   else
-    # Main content file
+    # TK This is the Main file deposit
+    # TK : We need to change a function in subiGuts.rb line 255
+    #      which  code converts main files PDF.
+    #      Afterwords, this the replacement IF statment:
+    #
+    # if info[:type] == "ARTICLE" &&
+    #  (!isPDF(mimeType) && !isWordDoc(mimeType))
+    #
     if !isPDF(mimeType) && !isWordDoc(mimeType)
       userErrorHalt(shortArk, "Only PDF and Word docs are acceptable for the main content.")
     end
