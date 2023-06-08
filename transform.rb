@@ -180,19 +180,36 @@ def assignSeries(data, completionDate, metaHash)
 
     # RGPO special logic
     elsif $groupToRGPO[groupID]
-      # If completed on or after 2017-01-08, check funding
-      if (completionDate >= Date.new(2017,1,8)) && metaHash['funder-name'] &&
-         (metaHash['funder-name'].include?($groupToRGPO[groupID]))
-        rgpoUnit = "#{$groupToRGPO[groupID].downcase}_rw"
-      else
-        rgpoUnit = "rgpo_rw"
+
+      # if completed on or after date, and has grant funding
+      if (completionDate >= Date.new(2017,1,8) && metaHash['funder-name'])
+        
+        # split the display-type
+        displayNames = metaHash['funder-type-display-name'].split('|')
+
+        puts("displayNames:")
+        puts(metaHash['funder-type-display-name'])
+        puts(displayNames)
+        # if the display names include grantor strings (TRDRP, etc), add the series
+        displayNames.each { |displayName|
+          if displayName.include?($groupToRGPO[groupID])
+            rgpoUnit = "#{$groupToRGPO[groupID].downcase}_rw"
+            rgpoUnits << rgpoUnit 
+            rgpoUnit
+          end
+        }
+
       end
-      rgpoUnits << rgpoUnit
-      rgpoUnit
-    else
-      nil
+
     end
   }.compact
+
+  # If the publication has any RGPO series, also add rgpo_rw series.
+  if !rgpoUnits.empty? 
+    campusSeries << "rgpo_rw"
+    rgpoUnits << "rgpo_rw"
+  end
+
 
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
@@ -225,6 +242,7 @@ def assignSeries(data, completionDate, metaHash)
     a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
   }
 
+  puts(seriesKeys)
   return data[:units] = seriesKeys
 end
 
@@ -370,6 +388,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
     end
   end
   metaHash.key?('funder-name') and data[:grants] = convertFunding(metaHash)
+  #metaHash.key?('funder-type-display-name')
 
   # Context
   assignSeries(data, getCompletionDate(data, metaHash), metaHash)
