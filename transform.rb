@@ -342,6 +342,14 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
   data[:type] = convertPubType(elementsPubType)
+  data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
+  if (elementsPubType == 'preprint' ||
+     (elementsPubType == 'journal-article' &&
+       (elementsPubStatus == 'In preparation' ||
+        elementsPubStatus == 'Submitted' ||
+        elementsPubStatus == 'Unpublished') ) )  
+    data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
+  end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   data[:embargoExpires] = assignEmbargo(metaHash)
 
