@@ -181,6 +181,8 @@ def assignSeries(data, completionDate, metaHash)
     # RGPO special logic
     elsif $groupToRGPO[groupID]
 
+      puts("checking metahash fundername")
+      puts (metaHash['funder-name'])
       # if completed on or after date, and has grant funding
       if (completionDate >= Date.new(2017,1,8) && metaHash['funder-name'])
         
