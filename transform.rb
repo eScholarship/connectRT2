@@ -172,7 +172,16 @@ def assignSeries(data, completionDate, metaHash)
   }]
   
   rgpoUnits = Set.new
+
+  puts("group check")
+  puts(groups)
+
+  # Funder display names include texts like TRDRP, CHRP, etc.
+  funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
+
   campusSeries = groups.map { |groupID, groupName|
+
+    puts("Group check: #{groupID}, #{groupName}")
 
     # Regular campus
     if $groupToCampus[groupID]
@@ -181,28 +190,31 @@ def assignSeries(data, completionDate, metaHash)
     # RGPO special logic
     elsif $groupToRGPO[groupID]
 
-      puts("checking metahash fundername")
-      puts (metaHash['funder-name'])
-      # if completed on or after date, and has grant funding
-      if (completionDate >= Date.new(2017,1,8) && metaHash['funder-name'])
-        
-        # split the display-type
-        displayNames = metaHash['funder-type-display-name'].split('|')
+      # puts("checking data grants")
+      # puts(data[:grants])
 
-        puts("displayNames:")
-        puts(metaHash['funder-type-display-name'])
-        puts(displayNames)
+      # if completed on or after date, and has grant funding
+      if (completionDate >= Date.new(2017,1,8) && data[:grants])
+        
         # if the display names include grantor strings (TRDRP, etc), add the series
-        displayNames.each { |displayName|
+        funderDisplayNames.each { |displayName|
           if displayName.include?($groupToRGPO[groupID])
+            puts("true: #{displayName} / #{$groupToRGPO[groupID]}")
             rgpoUnit = "#{$groupToRGPO[groupID].downcase}_rw"
-            rgpoUnits << rgpoUnit 
-            rgpoUnit
+
+          else
+            puts("False: #{displayName} / #{$groupToRGPO[groupID]}")
+            rgpoUnit = "rgpo_rw"
+
           end
+          rgpoUnits << rgpoUnit
+          rgpoUnit
         }
 
       end
 
+    else
+      nil
     end
   }.compact
 
@@ -212,6 +224,10 @@ def assignSeries(data, completionDate, metaHash)
     rgpoUnits << "rgpo_rw"
   end
 
+  puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
+  puts("Campus Series check:")
+  puts(campusSeries)
+  #puts(rgpoUnits.to_a)
 
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
