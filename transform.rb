@@ -34,7 +34,7 @@ $groupToCampus = { 684 => 'lbnl',
 
 $groupToRGPO = { 784 => 'CBCRP',
                  785 => 'CHRP',
-                 #787 => 'TRDRP',
+                 787 => 'TRDRP',
                  783 => 'TRDRP',
                  786 => 'UCRI' }
 
