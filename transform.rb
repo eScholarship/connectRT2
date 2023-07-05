@@ -35,6 +35,7 @@ $groupToCampus = { 684 => 'lbnl',
 $groupToRGPO = { 784 => 'CBCRP',
                  785 => 'CHRP',
                  787 => 'TRDRP',
+                 783 => 'TRDRP',
                  786 => 'UCRI' }
 
 ###################################################################################################
@@ -171,29 +172,57 @@ def assignSeries(data, completionDate, metaHash)
     [$1.to_i, $2]
   }]
   
+  # We use two sets here to facilitate regex-based sorting 
+  # when we combined the two into campusSeries (and convert to array)
+  campusSeries = Set.new
   rgpoUnits = Set.new
-  campusSeries = groups.map { |groupID, groupName|
 
-    # Regular campus
+  puts("group check")
+  puts(groups)
+
+  # Funder display names include texts like TRDRP, CHRP, etc.
+  funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
+
+  groups.each { |groupID, groupName|
+  
+    puts("Group check: #{groupID}, #{groupName}")
+
+    # Regular campus and LBL
     if $groupToCampus[groupID]
-      (groupID == 684) ? "lbnl_rw" : "#{$groupToCampus[groupID]}_postprints"
+      (groupID == 684) ? campusSeries << "lbnl_rw" : campusSeries << "#{$groupToCampus[groupID]}_postprints"
 
-    # RGPO special logic
-    elsif $groupToRGPO[groupID]
-      # If completed on or after 2017-01-08, check funding
-      if (completionDate >= Date.new(2017,1,8)) && metaHash['funder-name'] &&
-         (metaHash['funder-name'].include?($groupToRGPO[groupID]))
-        rgpoUnit = "#{$groupToRGPO[groupID].downcase}_rw"
-      else
-        rgpoUnit = "rgpo_rw"
-      end
-      rgpoUnits << rgpoUnit
-      rgpoUnit
-    else
-      nil
+    # RGPO logic: groupID is an RGPO group, and pub is grant-funded
+    elsif ($groupToRGPO[groupID] && completionDate >= Date.new(2017,1,8) && data[:grants])
+       
+      # if the funder display names include RGPO strings (TRDRP, etc),
+      # add that series and rgpo_rw. Otherwise, it's not an RGPO grant so ignore it.
+      funderDisplayNames.each { |displayName|
+
+        if displayName.include?($groupToRGPO[groupID])
+          puts("RGPO grant found!!: #{displayName} / #{$groupToRGPO[groupID]}")
+          rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
+          rgpoUnits << "rgpo_rw"
+        else
+          puts("Not an RGPO grant: #{displayName} / #{$groupToRGPO[groupID]}")
+        end
+      }
+
     end
-  }.compact
+  }
 
+  # If the user is non-uc and no has units, add rgpo_rw
+  if (rgpoUnits.empty?() && campusSeries.empty?() && groups.key?(779))
+    rgpoUnits << "rgpo_rw"
+  end
+
+  # Check the two sets
+  puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
+  puts("Campus series check: #{campusSeries.to_a.join(',')}")
+
+  # Combine the two sets and convert to array 
+  campusSeries = (campusSeries | rgpoUnits).to_a
+  puts("Combined campusSeries array: #{campusSeries}")
+  
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
   ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
@@ -225,6 +254,7 @@ def assignSeries(data, completionDate, metaHash)
     a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
   }
 
+  puts(seriesKeys)
   return data[:units] = seriesKeys
 end
 
@@ -378,6 +408,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
     end
   end
   metaHash.key?('funder-name') and data[:grants] = convertFunding(metaHash)
+  #metaHash.key?('funder-type-display-name')
 
   # Context
   assignSeries(data, getCompletionDate(data, metaHash), metaHash)
