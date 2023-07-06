@@ -19,7 +19,7 @@
           <xwalk:field-source data-part="person:initials" prefix="[initials] " />
           <xwalk:field-source data-part="person:identifier" prefix="[identifier] " />
           <xwalk:field-source data-part="person:email-address" prefix="[email-address] " />
-          <xwalk:field-source data-part="person:address" prefix="[address] " format="address:full-multi-line" />
+          <xwalk:field-source data-part="person:address" prefix="[address] " />
           <xwalk:field-source data-part="person:resolved-user">
             <xwalk:field-source from="user.email-address" prefix="[resolved-user-email] " />
           </xwalk:field-source>
@@ -37,7 +37,7 @@
           <xwalk:field-source data-part="person:initials" prefix="[initials] " />
           <xwalk:field-source data-part="person:identifier" prefix="[identifier] " />
           <xwalk:field-source data-part="person:email-address" prefix="[email-address] " />
-          <xwalk:field-source data-part="person:address" prefix="[address] " format="address:full-multi-line" />
+          <xwalk:field-source data-part="person:address" prefix="[address] " />
           <xwalk:field-source data-part="person:resolved-user">
             <xwalk:field-source from="user.email-address" prefix="[resolved-user-email] " />
           </xwalk:field-source>
@@ -64,6 +64,13 @@
         <xwalk:field-source from="object.relationships" value-map="grant-relationships">
           <xwalk:field-source data-part="relationship:other-object">
             <xwalk:field-source from="api:object/api:view/api:field[@name='funder-reference']" select-using="xpath" />
+          </xwalk:field-source>
+        </xwalk:field-source>
+      </xwalk:field-mapping>
+      <xwalk:field-mapping to="funder-type-display-name" separator="|">
+        <xwalk:field-source from="object.relationships" value-map="grant-relationships">
+          <xwalk:field-source data-part="relationship:other-object">
+            <xwalk:field-source from="api:object /@type-display-name" select-using="xpath" />
           </xwalk:field-source>
         </xwalk:field-source>
       </xwalk:field-mapping>
@@ -106,13 +113,13 @@
         <xwalk:field-source from="object.type" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="title">
-        <xwalk:field-source from="title" />
+        <xwalk:field-source from="title" value-map="remove-jats-markup" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="parent-title">
         <xwalk:field-source from="parent-title" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="abstract">
-        <xwalk:field-source from="abstract" />
+        <xwalk:field-source from="abstract" value-map="remove-jats-markup" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="publisher">
         <xwalk:field-source from="publisher" />
@@ -169,6 +176,9 @@
       <xwalk:field-mapping to="custom-citation">
         <xwalk:field-source from="c-custom-citation" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="is-reviewed">
+        <xwalk:field-source from="c-is-reviewed" />
+      </xwalk:field-mapping>
     </xwalk:field-map>
   </xwalk:field-maps>
   <!-- Optionally defines value-map(s) -->
@@ -184,6 +194,23 @@
     <xwalk:value-map name="no-text" matchMode="regex">
       <xwalk:value-mapping from=".+" to=" " />
     </xwalk:value-map>
+    <!-- Remove JATS markup, which is often found in abstracts, particular those harvested from CrossRef. -->
+    <xwalk:value-map name="remove-jats-markup" matchMode="regex">
+      <!-- (1) Replace all JATS opening tags with the empty string. -->
+      <xwalk:value-mapping from="&lt;jats:[^&gt;]+&gt;" to="" />
+      <!-- (2) Replace certain JATS closing tags with a space and a line break. -->
+      <!-- </jats:title> -->
+      <xwalk:value-mapping from="&lt;\/jats:title&gt;" to=": &#xA;" />
+      <!-- </jats:p> -->
+      <xwalk:value-mapping from="&lt;\/jats:p&gt;" to=" &#xA;" />
+      <!-- </jats:*-title> i.e. any valid JATS XML closing tag ending with "-title" -->
+      <xwalk:value-mapping from="&lt;\/jats:[\w-]+-title&gt;" to=" &#xA;" />
+      <!-- (3) Replace all other JATS closing tags with the empty string. -->
+      <xwalk:value-mapping from="&lt;\/jats:[\w-]+&gt;" to="" />
+      <!-- Replace \n with HTML & tag -->
+      <xwalk:value-mapping from="\\n" to="&#xA;" />
+    </xwalk:value-map>
+    <!-- END JATS markup -->
   </xwalk:value-maps>
   <!-- Fields where Elements has authority to perform metadata updates. We want all fields,
        so this list is generated automatically using the following command line:
@@ -198,6 +225,7 @@
       <xwalk:field-authority field-name="groups" />
       <xwalk:field-authority field-name="funder-name" />
       <xwalk:field-authority field-name="funder-reference" />
+      <xwalk:field-authority field-name="funder-type-display-name" />
       <xwalk:field-authority field-name="depositor-email" />
       <xwalk:field-authority field-name="depositor-group" />
       <xwalk:field-authority field-name="deposit-type" />
@@ -229,6 +257,7 @@
       <xwalk:field-authority field-name="report-number" />
       <xwalk:field-authority field-name="keywords" />
       <xwalk:field-authority field-name="custom-citation" />
+      <xwalk:field-authority field-name="is-reviewed" />
     </xwalk:field-authority-list>
   </xwalk:field-authority-lists>
   <!-- Selects which field map to use -->
