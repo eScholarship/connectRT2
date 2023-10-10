@@ -1,8 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
-  
   <rel:category name="publication">
-    
     <rel:masks>
       <rel:mask name="default">
         <rel:inspect-object>
@@ -34,7 +32,6 @@
         </rel:exclude-sources>-->
       </rel:mask>
     </rel:masks>
-    
     <rel:hash-definitions>
       <rel:hash-definition name="default">
         <rel:value from="title" />
@@ -63,17 +60,15 @@
         <rel:value from="doi" />
         <rel:value from="number" />
         <rel:value from="object.labels" />
+        <rel:value from="c-custom-citation" />
         <rel:link-types>
           <rel:link-type name="publication-user-authorship" />
           <rel:link-type name="publication-grant-funded" />
         </rel:link-types>
       </rel:hash-definition>
     </rel:hash-definitions>
-    
     <rel:relevance-definition-selector>
       <rel:relevance-definition-selection mask="default" hash-definition="default" />
     </rel:relevance-definition-selector>
-    
   </rel:category>
-  
 </rel:xml-relevance-scheme>
