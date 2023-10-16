@@ -1,0 +1,161 @@
+<rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
+  <rel:category name="publication">
+    <!-- 
+      BEN: A mask can be used to filter the publication metadata before it is hashed, for example by excluding certain
+      metadata fields, or metadata from certain data sources. Note that a mask also affects the metadata that is used
+      as the input to the deposit crosswalk in the event that the relevance scheme hash changes and triggers an
+      automated metadata update.
+    -->
+    
+
+
+    <rel:masks>
+
+      <!-- Exclude metadata from all data source records except verified manual records. -->
+      <rel:mask name="manual-record-mask">
+        <rel:exclude-sources-except>
+          <rel:source name="manual" partition="verified" />
+        </rel:exclude-sources-except>
+      </rel:mask>
+
+      <!-- The pub. must have an eSchol record AND approved grant links. -->
+      <rel:mask name="eschol-with-grants-mask">
+
+        <rel:inspect-object>
+          <rel:if>
+
+            <rel:condition operator="not">
+              <rel:condition operator="and">
+
+                  <rel:condition argument-field="object.record-sources"
+                    operator="contains-any-of">eScholarship
+                  </rel:condition>
+
+                  <rel:condition argument-field="object.approved-link-types"
+                    operator="contains-any-of">publication-grant-funded
+                  </rel:condition>
+
+              <!-- end AND -->
+              </rel:condition>
+
+            <!-- end NOT -->
+            </rel:condition>
+
+            <!-- Result: mask object -->
+            <rel:result>
+                <rel:mask-object/>
+            </rel:result>
+
+          </rel:if>
+        </rel:inspect-object>
+      </rel:mask>
+
+    </rel:masks>
+
+
+
+
+
+
+    <rel:aggregations>
+      <!-- Only use verified manual records when aggregating metadata. -->
+      <rel:aggregation name="manual-verified-only">
+        <rel:source-precedence>
+          <rel:source name="manual" partition="verified" />
+        </rel:source-precedence>
+      </rel:aggregation>
+    </rel:aggregations>
+    
+    <!--
+      BEN: The relevance scheme hash is how Elements detects 'relevant' changes in a publication's metadata, i.e. changes
+      which should trigger an automated metadata update. Every time a publication is reindexed, a hash value is
+      calculated for it and stored. A change in the hash value indicates that some relevant change has taken place and
+      the automated metadata update process should be triggered.
+
+      A hash definition is a list of the metadata fields and/or relationship types that should be considered when
+      calculating the hash value. To have a change field or relationship type trigger the update process, include it in
+      the hash definition.
+
+      Note that the hash definition only defines which fields/relationships will _trigger_ the update process. Fields
+      and relationships that are not listed here may still be used when _making_ an update, according to the selected
+      mask, aggregation, post-aggregation mask, field authority list and deposit crosswalk mappings.
+    -->
+
+
+    <rel:hash-definitions>
+      <rel:hash-definition name="default">
+        <rel:value from="title" />
+        <rel:value from="authors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="parent-title" />
+        <rel:value from="abstract" />
+        <rel:value from="editors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="publisher" />
+        <rel:value from="publication-status" />
+        <rel:value from="publication-date" />
+        <rel:value from="isbn-10" />
+        <rel:value from="isbn-13" />
+        <rel:value from="issn" />
+        <rel:value from="eissn" />
+        <rel:value from="journal" />
+        <rel:value from="volume" />
+        <rel:value from="issue" />
+        <rel:value from="pagination" />
+        <rel:value from="doi" />
+        <rel:value from="number" />
+        <rel:value from="object.labels" />
+        <rel:value from="c-custom-citation" />
+        <rel:link-types>
+          <rel:link-type name="publication-user-authorship" />
+          <rel:link-type name="publication-grant-funded" />
+        </rel:link-types>
+      </rel:hash-definition>
+    </rel:hash-definitions>
+
+
+
+
+    <!-- Choose the schemas -->
+    <rel:relevance-definition-selector>
+
+        <!-- If the pub has a manual record, use the manual mask -->
+        <rel:if>  
+
+          <rel:condition
+            argument-field="object.record-sources"
+            operator="contains-any-of">manual
+          </rel:condition>
+
+          <rel:result>
+            <rel:relevance-definition-selection
+              mask="manual-record-mask"
+              aggregation="manual-verified-only"
+              hash-definition="default" />
+          </rel:result>
+
+          <!-- Otherwise, use the eSchol masking -->
+          <rel:else>
+            <rel:result>
+              <rel:relevance-definition-selection
+                mask="eschol-with-grants-mask"
+                hash-definition="default" />
+            </rel:result>
+          </rel:else>
+
+        </rel:if>
+
+    </rel:relevance-definition-selector>
+
+  </rel:category>
+</rel:xml-relevance-scheme>
