@@ -18,3 +18,5 @@ tmp/
 failedUpdates/
 holidayUpdates/
 outdatedFailedUpdates/
+vendor/
+local-testing
