@@ -1,9 +1,0 @@
-#!/bin/bash
-
-set -e
-set -x
-
-rm -f cookies
-curl --cookie-jar cookies -X POST https://pub-submit-stg.escholarship.org/dspace-rest/login -d "email=martin.haye%40ucop.edu&password=Say4lank-viscus"
-#curl --cookie cookies https://pub-submit-stg.escholarship.org/dspace-rest/items/qtttvqrpm5?expand=metadata
-curl --cookie cookies https://pub-submit-stg.escholarship.org/dspace-rest/items/qtttzc26jw?expand=metadata,bitstreams,parentCollection,parentCollectionList
