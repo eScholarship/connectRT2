@@ -5,4 +5,4 @@ set -x
 
 rm -f cookies
 curl --cookie-jar cookies -X POST https://pub-submit-stg.escholarship.org/dspace-rest/login -d "email=martin.haye%40ucop.edu&password=Say4lank-viscus"
-curl --cookie cookies -X PUT https://pub-submit-stg.escholarship.org/dspace-rest/items/qt1px69959/metadata -d @metaFromElements.xml
+curl --cookie cookies -X PUT https://pub-submit-stg.escholarship.org/dspace-rest/items/qttt2cn230/metadata -d @metaFromElements.xml
