@@ -92,7 +92,12 @@ ITEM_META_FIELDS = %{
   isPeerReviewed
   fpage
   lpage
-  grants
+  grants {
+    nodes {
+      name
+      reference
+    }
+  }
   issn
   isbn
   journal
@@ -496,7 +501,7 @@ def formatItemData(data, expand)
 end
 
 ###################################################################################################
-get %r{/dspace-rest/(items|handle)/(.*)} do
+get %r{/dspace-rest/(items|handle)/(.*)} do 
   verifyLoggedIn
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
