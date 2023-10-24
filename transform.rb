@@ -597,7 +597,8 @@ def mimicDspaceXMLOutput(input_xml)
 
   # -------------------------  
   # Main function
-  noko_xml = input_xml
+  # noko_xml = input_xml
+  noko_xml = Nokogiri::XML(input_xml)
 
   # Loop the nested metadata nodes, nesting or removing them as needed
   noko_xml.xpath("/root/*").each do |node|
