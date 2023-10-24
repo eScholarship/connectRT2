@@ -399,14 +399,14 @@ def formatItemData(data, expand)
 
   if expand =~ /metadata/
     fullData = data.clone
-    puts()
+    # puts()
     puts(fullData)
-    puts()
+    # puts()
     metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
-    puts()
-    puts(metaXML)
-    puts()
-    metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
+    # puts()
+    # puts(metaXML)
+    # puts()
+    # metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
   else
     metaXML = ""
   end
@@ -482,7 +482,8 @@ def formatItemData(data, expand)
     }.join("\n")
   end
 
-  return xmlGen('''
+  # return xmlGen('''
+  old_xml = xmlGen('''
     <item>
       <link>/rest/items/13030/<%= itemID %></link>
       <expand>parentCommunityList</expand>
@@ -499,6 +500,12 @@ def formatItemData(data, expand)
       <withdrawn><%= data.dig("status") == "WITHDRAWN" %></withdrawn>
       <%== bitstreams %>
     </item>''', binding, xml_header: false)
+
+    new_xml = mimicDspaceXMLOutput(older_xml)
+    puts()
+    puts(new_xml)
+    puts()
+    return new_xml
 end
 
 ###################################################################################################
