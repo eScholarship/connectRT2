@@ -502,9 +502,13 @@ def formatItemData(data, expand)
     </item>''', binding, xml_header: false)
 
     new_xml = mimicDspaceXMLOutput(old_xml)
+
+    puts()
+    puts(old_xml)
     puts()
     puts(new_xml)
     puts()
+    
     return new_xml
 end
 

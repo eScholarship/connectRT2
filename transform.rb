@@ -651,7 +651,7 @@ def mimicDspaceXMLOutput(input_xml)
 
   # -------------------------  
   # Main function
-  noko_xml = Nokogiri::XML(input_xml)
+  noko_xml = input_xml
 
   # Cleanup unneeded data --> Eventually just remove from GraphQL
   noko_xml.xpath("//parentCollection").each do |node|
