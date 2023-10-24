@@ -487,3 +487,148 @@ def transformPeople(pieces, role)
 
   return people.empty? ? nil : people
 end
+
+###################################################################################################
+def mimicDspaceXMLOutput(input_xml)
+
+  # -------------------------
+  def nest_metadata_simple(node, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = node.name
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = node.text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
+  def convert_local_id(node, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = "elements-pub-id"
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = node.css("id").text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
+  def nest_metadata_authors(authors_node, document)
+
+    def get_new_vt(new_tag, new_text)
+      return("[" << new_tag << "] " << new_text << "|| \n")
+    end
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Text string for metadata value
+    value_text = ""
+
+    # Map for translating escholarship node nades to elements
+    authorMap = Struct.new(:xpath, :elements_name)
+    author_children_array = Array[
+      authorMap.new('nameParts/lname', 'lastname'),
+      authorMap.new('nameParts/fname', 'firstnames'),
+      authorMap.new('nameParts/fname', 'initials'),
+      authorMap.new('email', 'resolved-user-email'),
+      authorMap.new('orcid', 'resolved-user-orcid'),
+    ]
+
+    # Loop the author nodes and assemble the value text
+    authors_node.xpath("nodes").each do |author_node|
+
+      value_text << "\n[start-person] ||\n"
+
+      author_children_array.each do |aMap|
+
+        if aMap.elements_name != "initials"
+          child_text = author_node.xpath(aMap.xpath).text
+          (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
+
+        else
+          # The initials calculation is slightly hacky
+          child_text = author_node.xpath(aMap.xpath).text
+          child_text = child_text.upcase()[0]
+          (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
+
+        end
+
+      end
+
+      value_text << "[end-person] \n"
+
+    end
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = "authors"
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = value_text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------  
+  # Main function
+  noko_xml = Nokogiri::XML(input_xml)
+  noko_xml.xpath("//metadata/*").each do |node|
+
+    # Switch for certain nodes which return nested results
+    case node.name
+
+      when "authors"
+        node.replace(nest_metadata_authors(node, noko_xml))
+
+      when "localIDs"
+        if (node.css("scheme").text == "OA_PUB_ID")
+          node.replace(convert_local_id(node, noko_xml))
+        else
+          node.unlink()
+        end
+
+      when "key", "value", "units", "parentCollection", "parentCollectionList"
+        node.unlink()
+
+      else
+        node.replace(nest_metadata_simple(node, noko_xml))
+
+    end
+
+  end
+
+  # Cleanup other unneeded data
+  noko_xml.xpath("//parentCollection").each do |node|
+    node.unlink()
+  end
+
+  noko_xml.xpath("//parentCollectionList").each do |node|
+    node.unlink()
+  end
+
+  return(noko_xml)
+
+end

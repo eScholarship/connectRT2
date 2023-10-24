@@ -92,12 +92,7 @@ ITEM_META_FIELDS = %{
   isPeerReviewed
   fpage
   lpage
-  grants {
-    nodes {
-      name
-      reference
-    }
-  }
+  grants
   issn
   isbn
   journal
