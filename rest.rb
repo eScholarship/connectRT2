@@ -399,6 +399,9 @@ def formatItemData(data, expand)
 
   if expand =~ /metadata/
     fullData = data.clone
+    puts()
+    puts(fullData)
+    puts()
     metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
     puts()
     puts(metaXML)
