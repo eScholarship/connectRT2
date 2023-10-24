@@ -400,6 +400,9 @@ def formatItemData(data, expand)
   if expand =~ /metadata/
     fullData = data.clone
     metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+    puts()
+    puts(metaXML)
+    puts()
     metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
   else
     metaXML = ""

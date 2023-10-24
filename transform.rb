@@ -489,6 +489,8 @@ def transformPeople(pieces, role)
 end
 
 ###################################################################################################
+# DS 2023-10-24
+# This code taxes the existing simple
 def mimicDspaceXMLOutput(input_xml)
 
   # -------------------------
@@ -593,34 +595,65 @@ def mimicDspaceXMLOutput(input_xml)
   end
 
   # -------------------------  
-  # Main function
-  noko_xml = Nokogiri::XML(input_xml)
-  noko_xml.xpath("//metadata/*").each do |node|
-
-    # Switch for certain nodes which return nested results
-    case node.name
-
-      when "authors"
-        node.replace(nest_metadata_authors(node, noko_xml))
-
-      when "localIDs"
-        if (node.css("scheme").text == "OA_PUB_ID")
-          node.replace(convert_local_id(node, noko_xml))
-        else
-          node.unlink()
-        end
-
-      when "key", "value", "units", "parentCollection", "parentCollectionList"
-        node.unlink()
-
-      else
-        node.replace(nest_metadata_simple(node, noko_xml))
-
-    end
+  def to_formatted_xml_string(document)
+      xsl_template = '''
+  <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+    <xsl:output method="xml" encoding="ISO-8859-1"/>
+    <xsl:param name="indent-increment" select="\'   \'"/>
+   
+    <xsl:template name="newline">
+      <xsl:text disable-output-escaping="yes">
+  </xsl:text>
+    </xsl:template>
+   
+    <xsl:template match="comment() | processing-instruction()">
+      <xsl:param name="indent" select="\'\'"/>
+      <xsl:call-template name="newline"/>
+      <xsl:value-of select="$indent"/>
+      <xsl:copy />
+    </xsl:template>
+   
+    <xsl:template match="text()">
+      <xsl:param name="indent" select="\'\'"/>
+      <xsl:call-template name="newline"/>
+      <xsl:value-of select="$indent"/>
+      <xsl:value-of select="normalize-space(.)"/>
+    </xsl:template>
+   
+    <xsl:template match="text()[normalize-space(.)=\'\']"/>
+   
+    <xsl:template match="*">
+      <xsl:param name="indent" select="\'\'"/>
+      <xsl:call-template name="newline"/>
+      <xsl:value-of select="$indent"/>
+        <xsl:choose>
+         <xsl:when test="count(child::*) > 0">
+          <xsl:copy>
+           <xsl:copy-of select="@*"/>
+           <xsl:apply-templates select="*|text()">
+             <xsl:with-param name="indent" select="concat ($indent, $indent-increment)"/>
+           </xsl:apply-templates>
+           <xsl:call-template name="newline"/>
+           <xsl:value-of select="$indent"/>
+          </xsl:copy>
+         </xsl:when>
+         <xsl:otherwise>
+          <xsl:copy-of select="."/>
+         </xsl:otherwise>
+       </xsl:choose>
+    </xsl:template>
+  </xsl:stylesheet>
+  '''
+    xsl = Nokogiri::XSLT(xsl_template)
+    return(xsl.apply_to(document).to_s)
 
   end
 
-  # Cleanup other unneeded data
+  # -------------------------  
+  # Main function
+  noko_xml = Nokogiri::XML(input_xml)
+
+  # Cleanup unneeded data --> Eventually just remove from GraphQL
   noko_xml.xpath("//parentCollection").each do |node|
     node.unlink()
   end
@@ -629,6 +662,42 @@ def mimicDspaceXMLOutput(input_xml)
     node.unlink()
   end
 
-  return(noko_xml)
+  # We will be un-nesting the metadata
+  new_parent = noko_xml.xpath("/item/*[last()]")
+
+  # Loop the nested metadata nodes, nesting or removing them as needed
+  noko_xml.xpath("//metadata/*").each do |node|
+
+    # Unlink the node from the tree
+    node.unlink()
+
+    # Switch for certain nodes which return nested results
+    case node.name
+
+    when "authors"
+      new_parent.after(nest_metadata_authors(node, noko_xml))
+
+    when "localIDs"
+      if (node.css("scheme").text == "OA_PUB_ID")
+        new_parent.after(convert_local_id(node, noko_xml))
+      else
+        nil
+      end
+
+    when "key", "value", "units"
+      nil
+
+    else
+      new_parent.after(nest_metadata_simple(node, noko_xml))
+
+    end
+
+  end
+
+  # Delete the original, first metadata container (should be empty)
+  noko_xml.css("metadata").first().unlink()
+
+  # Convert to propper string format
+  return(to_formatted_xml_string(noko_xml))
 
 end
