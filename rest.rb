@@ -501,7 +501,7 @@ def formatItemData(data, expand)
       <%== bitstreams %>
     </item>''', binding, xml_header: false)
 
-    new_xml = mimicDspaceXMLOutput(older_xml)
+    new_xml = mimicDspaceXMLOutput(old_xml)
     puts()
     puts(new_xml)
     puts()
