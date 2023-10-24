@@ -480,8 +480,7 @@ def formatItemData(data, expand)
     }.join("\n")
   end
 
-  # return xmlGen('''
-  old_xml = xmlGen('''
+  return xmlGen('''
     <item>
       <link>/rest/items/13030/<%= itemID %></link>
       <expand>parentCommunityList</expand>
@@ -499,15 +498,15 @@ def formatItemData(data, expand)
       <%== bitstreams %>
     </item>''', binding, xml_header: false)
 
-    new_xml = mimicDspaceXMLOutput(old_xml)
+    # new_xml = mimicDspaceXMLOutput(old_xml)
 
-    puts()
-    puts(old_xml)
-    puts()
-    puts(new_xml)
-    puts()
+    # puts()
+    # puts(old_xml)
+    # puts()
+    # puts(new_xml)
+    # puts()
 
-    return new_xml
+    # return new_xml
 end
 
 ###################################################################################################
