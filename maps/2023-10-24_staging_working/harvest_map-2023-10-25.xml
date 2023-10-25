@@ -153,10 +153,10 @@
         <xwalk:field-source from="/item/metadata[key='keywords']/value" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="doi">
-        <xwalk:field-source from="/item/metadata/localIDs[scheme='DOI']/id" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata[key='doi']/value" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="oa-location-url">
-        <xwalk:field-source from="/item/metadata/externalLinks[1]" select-using="xpath" />
+        <xwalk:field-source from="/item/metadata[key='externalLinks']/value" select-using="xpath" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="c-eschol-id">
         <xwalk:field-source from="/item/metadata[key='elements-pub-id']/value" prefix="ark:/13030/" select-using="xpath" />

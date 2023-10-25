@@ -536,6 +536,11 @@ def mimicDspaceXMLOutput(input_xml)
   def nest_metadata_authors(authors_node, document)
 
     def get_new_vt(new_tag, new_text)
+      
+      if new_text == nil
+        new_text = ""
+      end
+
       return("[" << new_tag << "] " << new_text << "|| \n")
     end
 
@@ -608,6 +613,7 @@ def mimicDspaceXMLOutput(input_xml)
 
       # TK TK -- Copy author node, we still need it for the xwalk.
       when "authors"
+        author_nodes = node.dup()
         node.replace(nest_metadata_authors(node, noko_xml))
 
       when "localIDs"
