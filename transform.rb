@@ -514,13 +514,13 @@ def mimicDspaceXMLOutput(input_xml)
   end
 
   # -------------------------
-  def convert_local_id(node, document)
+  def convert_local_id(key_name, node, document)
 
     # Create the new metadataentry node
     metadata_node = Nokogiri::XML::Node.new "metadata", document
 
     meta_key = Nokogiri::XML::Node.new "key", document
-    meta_key.content = "elements-pub-id"
+    meta_key.content = key_name
 
     meta_value = Nokogiri::XML::Node.new "value", document
     meta_value.content = node.css("id").text
@@ -606,21 +606,25 @@ def mimicDspaceXMLOutput(input_xml)
     # Switch for certain nodes which return nested results
     case node.name
 
-    when "authors"
-      node.replace(nest_metadata_authors(node, noko_xml))
+      # TK TK -- Copy author node, we still need it for the xwalk.
+      when "authors"
+        node.replace(nest_metadata_authors(node, noko_xml))
 
-    when "localIDs"
-      if (node.css("scheme").text == "OA_PUB_ID")
-        node.replace(convert_local_id(node, noko_xml))
-      else
+      when "localIDs"
+        case node.css("scheme").text
+          when "OA_PUB_ID"
+            node.replace(convert_local_id("elements-pub-id", node, noko_xml))
+          when "DOI"
+            node.replace(convert_local_id("doi", node, noko_xml))
+          else
+            node.unlink()
+        end
+
+      when "key", "value", "units"
         node.unlink()
-      end
 
-    when "key", "value", "units"
-      node.unlink()
-
-    else
-      node.replace(nest_metadata_simple(node, noko_xml))
+      else
+        node.replace(nest_metadata_simple(node, noko_xml))
 
     end
 

@@ -1,0 +1,7 @@
+   <xwalk:choose>
+      <xwalk:when>
+        <xwalk:condition operator="equals" argument-field="/item/metadata[key='type']/value" select-using="xpath">ARTICLE</xwalk:condition>
+        <xwalk:result>
+
+
+        
