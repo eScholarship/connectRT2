@@ -637,6 +637,11 @@ def mimicDspaceXMLOutput(input_xml)
       when "key", "value", "units"
         node.unlink()
 
+      when "type"
+        # A non-nested type node required for xwalk harvest object-type-selector
+        type_node = node.dup()
+        node.replace(nest_metadata_simple(node, noko_xml))
+
       else
         node.replace(nest_metadata_simple(node, noko_xml))
 
