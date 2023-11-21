@@ -533,7 +533,7 @@ def mimicDspaceXMLOutput(input_xml)
   end
 
   # -------------------------
-  def nest_metadata_authors(authors_node, document)
+  def nest_metadata_people(people_node, document, output_key)
 
     def get_new_vt(new_tag, new_text)
       
@@ -551,29 +551,33 @@ def mimicDspaceXMLOutput(input_xml)
     value_text = ""
 
     # Map for translating escholarship node nades to elements
-    authorMap = Struct.new(:xpath, :elements_name)
-    author_children_array = Array[
-      authorMap.new('nameParts/lname', 'lastname'),
-      authorMap.new('nameParts/fname', 'firstnames'),
-      authorMap.new('nameParts/fname', 'initials'),
-      authorMap.new('email', 'resolved-user-email'),
-      authorMap.new('orcid', 'resolved-user-orcid'),
+    personMap = Struct.new(:xpath, :elements_name)
+    person_children_array = Array[
+      personMap.new('nameParts/lname', 'lastname'),
+      personMap.new('nameParts/fname', 'firstnames'),
+      personMap.new('nameParts/fname', 'initials'),
+      personMap.new('email', 'resolved-user-email'),
+      personMap.new('orcid', 'resolved-user-orcid'),
     ]
 
     # Loop the author nodes and assemble the value text
-    authors_node.xpath("nodes").each do |author_node|
+    people_node.xpath("nodes").each do |person_node|
+
+      if value_text != ""
+        value_text << "$"
+      end 
 
       value_text << "\n[start-person] ||\n"
 
-      author_children_array.each do |aMap|
+      person_children_array.each do |aMap|
 
         if aMap.elements_name != "initials"
-          child_text = author_node.xpath(aMap.xpath).text
+          child_text = person_node.xpath(aMap.xpath).text
           (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
 
         else
           # The initials calculation is slightly hacky
-          child_text = author_node.xpath(aMap.xpath).text
+          child_text = person_node.xpath(aMap.xpath).text
           child_text = child_text.upcase()[0]
           (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
 
@@ -587,7 +591,7 @@ def mimicDspaceXMLOutput(input_xml)
 
     # Add the key and value as children nodes
     meta_key = Nokogiri::XML::Node.new "key", document
-    meta_key.content = "authors"
+    meta_key.content = output_key
 
     meta_value = Nokogiri::XML::Node.new "value", document
     meta_value.content = value_text
@@ -611,10 +615,14 @@ def mimicDspaceXMLOutput(input_xml)
     # Switch for certain nodes which return nested results
     case node.name
 
-      # TK TK -- Copy author node, we still need it for the xwalk.
+      # TK TK -- Copy author node, we still need it for the xwalk -- can delete this I think
       when "authors"
         author_nodes = node.dup()
-        node.replace(nest_metadata_authors(node, noko_xml))
+        node.replace(nest_metadata_people(node, noko_xml, "authors"))
+
+      when "contributors"
+        editor_node = node.dup()
+        node.replace(nest_metadata_people(node, noko_xml, "editors"))
 
       when "localIDs"
         case node.css("scheme").text

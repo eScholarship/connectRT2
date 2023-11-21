@@ -129,10 +129,55 @@
       <xwalk:field-mapping to="title">
         <xwalk:field-source from="/item/metadata[key='title']/value" select-using="xpath" />
       </xwalk:field-mapping>
+
+
+
+
+
+
+
+
+
       <xwalk:field-mapping to="authors">
+
+        <xwalk:field-source from="authors" is-list="true" split-using-delimiter="[start-person] ||&#xD;&#xA;">
+
+         <!-- separator="||&#xD;&#xA;"> -->
+
+          <!-- <xwalk:field-source value="start" prefix="&#xD;&#xA;[start-person]"/> -->
+
+          <xwalk:field-source data-part="person:lastname" prefix="[lastname] " />
+          <xwalk:field-source data-part="person:firstnames" prefix="[firstnames] " />
+          <xwalk:field-source data-part="person:initials" prefix="[initials] " />
+          <xwalk:field-source data-part="person:identifier" prefix="[identifier] " />
+          <xwalk:field-source data-part="person:email-address" prefix="[email-address] " />
+          <xwalk:field-source data-part="person:address" prefix="[address] " />
+          <xwalk:field-source data-part="person:resolved-user">
+            <xwalk:field-source from="user.email-address" prefix="[resolved-user-email] " />
+          </xwalk:field-source>
+          <xwalk:field-source data-part="person:resolved-user">
+            <xwalk:field-source from="api:object/api:user-identifier-associations" value-map="extract-orcid" select-using="xpath" prefix="[resolved-user-orcid] " />
+          </xwalk:field-source>
+
+          <!-- <xwalk:field-source value="end" prefix="[end-person]" /> -->
+
+        </xwalk:field-source>
+
+      </xwalk:field-mapping>
+
+
+
+
+
+      <!--
+      <xwalk:field-mapping to="authors">
+
         <xwalk:field-source from="/item/metadata/authors/nodes" select-using="xpath">
+
           <xwalk:field-source from="nodes/nameParts/lname/text()" select-using="xpath" data-part="person:lastname" />
+
           <xwalk:field-source from="nodes/nameParts/*[self::fname or self::mname]" select-using="xpath" data-part="person:firstnames" concatenate-with-separator=" " />
+
           <xwalk:field-source data-part="person:address">
             <xwalk:field-source from="nodes/nameParts/institution/text()" select-using="xpath" data-part="address:organisation" />
           </xwalk:field-source>
@@ -143,6 +188,13 @@
           </xwalk:field-source>
         </xwalk:field-source>
       </xwalk:field-mapping>
+      -->
+
+
+
+
+
+
       <xwalk:field-mapping to="journal">
         <xwalk:field-source from="/item/metadata[key='journal']/value" select-using="xpath" />
       </xwalk:field-mapping>
