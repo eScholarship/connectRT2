@@ -400,11 +400,11 @@ def formatItemData(data, expand)
   if expand =~ /metadata/
     fullData = data.clone
     metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "root"}))
-    puts
-    puts metaXML
+
+    # puts metaXML
     metaXML = mimicDspaceXMLOutput(metaXML)
-    puts
-    puts metaXML
+    # puts metaXML
+    
   else
     metaXML = ""
   end
@@ -744,7 +744,7 @@ end
 
 ###################################################################################################
 def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
-  puts "In processMetaUpdate."
+  # puts "In processMetaUpdate."
 
   begin
     if !metaHash.key?('groups')
@@ -787,7 +787,7 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     #puts "\nd1="; pp d1
     #puts "\nd2="; pp d2
     diff = JsonDiff.diff(d1, d2, include_was: true)
-    puts "Anticipated diff:"; pp diff
+    # puts "Anticipated diff:"; pp diff
     if diff.empty?
       puts "No anticipated diff; skipping update."
       return nil
