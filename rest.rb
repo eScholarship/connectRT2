@@ -183,11 +183,9 @@ def accessAPIQuery(query, vars = {}, privileged = false)
                  :headers => headers,
                  :body => { variables: varHash, query: query }.to_json)
     if response.code != 200
-      raise("Internal error (graphql): " +
-      "HTTP code #{response.code} - #{response.message}.\n" +
-      "#{response.body}")
-      puts("DS: Returning empty string instead of data")
-      return("")
+      raise("Internal error (graphql): " + "HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
+      puts "DS: Returning empty string instead of data"
+      return " "
     end
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
