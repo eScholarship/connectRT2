@@ -645,6 +645,7 @@ def mimicDspaceXMLOutput(input_xml)
           node.replace(nest_metadata_simple(node, noko_xml))
         else
           node.unlink()
+        end
 
       when "type"
         # A unique node name is required for xwalk harvest object-type-selector
