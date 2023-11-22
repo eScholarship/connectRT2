@@ -671,6 +671,7 @@ def mimicDspaceXMLOutput(input_xml)
 
   metadata_node.add_child(meta_key)
   metadata_node.add_child(meta_value)
+  noko_xml.xpath("/root/*").add_child(metadata_node)
 
   return(noko_xml.xpath("/root/*").to_s())
 
