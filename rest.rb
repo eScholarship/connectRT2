@@ -197,9 +197,10 @@ def accessAPIQuery(query, vars = {}, privileged = false)
       end
     end
     raise
-    
-    puts "Returning empty string, for testing purposes."
-    return ""
+
+    puts "Returning empty hash, for testing purposes."
+    dummy_data = {'item' => []}
+    return dummy_data
   end
 
 
