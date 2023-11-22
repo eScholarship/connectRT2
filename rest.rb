@@ -197,7 +197,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
       end
     end
     raise
-  ensure
+    
     puts "Returning empty string, for testing purposes."
     return ""
   end
