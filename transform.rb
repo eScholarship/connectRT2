@@ -639,7 +639,7 @@ def mimicDspaceXMLOutput(input_xml)
 
       # Includes "eschol-meta-update"
       when "key"
-        if node.text == "eschol-meta-update":
+        if node.text == "eschol-meta-update"
           node.name = "eschol-meta-update"
           node.text = "true"
           node.replace(nest_metadata_simple(node, noko_xml))
