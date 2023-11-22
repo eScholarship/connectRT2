@@ -514,6 +514,26 @@ def mimicDspaceXMLOutput(input_xml)
   end
 
   # -------------------------
+  def make_new_metadata_node(key, value, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = key
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = value
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
   def convert_local_id(key_name, node, document)
 
     # Create the new metadataentry node
@@ -615,7 +635,7 @@ def mimicDspaceXMLOutput(input_xml)
     # Switch for certain nodes which return nested results
     case node.name
 
-      # TK TK -- Copy author node, we still need it for the xwalk -- can delete this I think
+      # TK TK -- Copy author node, we still need it for the xwalk -- can delete the duplicates, I think
       when "authors"
         author_nodes = node.dup()
         node.replace(nest_metadata_people(node, noko_xml, "authors"))
@@ -637,16 +657,6 @@ def mimicDspaceXMLOutput(input_xml)
       when "units"
         node.unlink()
 
-      # Includes "eschol-meta-update"
-      # when "key"
-      #   if node.text == "eschol-meta-update"
-      #     node.name = "eschol-meta-update"
-      #     node.text = "true"
-      #     node.replace(nest_metadata_simple(node, noko_xml))
-      #   else
-      #     node.unlink()
-      #   end
-
       when "type"
         # A unique node name is required for xwalk harvest object-type-selector
         type_node = node.dup()
@@ -661,17 +671,8 @@ def mimicDspaceXMLOutput(input_xml)
   end
 
   # Add the eschol-metadata update node
-  metadata_node = Nokogiri::XML::Node.new "metadata", noko_xml
-
-  meta_key = Nokogiri::XML::Node.new "key", noko_xml
-  meta_key.content = "eschol-meta-update"
-
-  meta_value = Nokogiri::XML::Node.new "value", noko_xml
-  meta_value.content = "true"
-
-  metadata_node.add_child(meta_key)
-  metadata_node.add_child(meta_value)
-  noko_xml.at_css("root").add_child(metadata_node)
+  eschol_meta_update_node = make_new_metadata_node("eschol-meta-update", "true", noko_xml)
+  noko_xml.at_css("root").add_child(eschol_meta_update_node)
 
   return(noko_xml.xpath("/root/*").to_s())
 
