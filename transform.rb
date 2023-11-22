@@ -634,18 +634,18 @@ def mimicDspaceXMLOutput(input_xml)
             node.unlink()
         end
 
-      when "units", "value"
+      when "units"
         node.unlink()
 
       # Includes "eschol-meta-update"
-      when "key"
-        if node.text == "eschol-meta-update"
-          node.name = "eschol-meta-update"
-          node.text = "true"
-          node.replace(nest_metadata_simple(node, noko_xml))
-        else
-          node.unlink()
-        end
+      # when "key"
+      #   if node.text == "eschol-meta-update"
+      #     node.name = "eschol-meta-update"
+      #     node.text = "true"
+      #     node.replace(nest_metadata_simple(node, noko_xml))
+      #   else
+      #     node.unlink()
+      #   end
 
       when "type"
         # A unique node name is required for xwalk harvest object-type-selector
@@ -659,6 +659,18 @@ def mimicDspaceXMLOutput(input_xml)
     end
 
   end
+
+  # Add the eschol-metadata update node
+  metadata_node = Nokogiri::XML::Node.new "metadata", noko_xml
+
+  meta_key = Nokogiri::XML::Node.new "key", noko_xml
+  meta_key.content = "eschol-meta-update"
+
+  meta_value = Nokogiri::XML::Node.new "value", noko_xml
+  meta_value.content = "true"
+
+  metadata_node.add_child(meta_key)
+  metadata_node.add_child(meta_value)
 
   return(noko_xml.xpath("/root/*").to_s())
 
