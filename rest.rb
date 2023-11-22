@@ -186,7 +186,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
       puts("Internal error (graphql): HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
 
       puts "DS: Returning empty hash, for testing purposes."
-      dummy_data = {'item' => []}
+      dummy_data = {"item"=>{}}
       return dummy_data
     end
   rescue Exception => exc
@@ -209,7 +209,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
     pp response['errors']
     raise("Internal error (graphql): #{response['errors'][0]['message']}")
   end
-  puts response['data']
+
   return response['data']
 end
 
