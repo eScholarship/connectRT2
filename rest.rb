@@ -209,6 +209,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
     pp response['errors']
     raise("Internal error (graphql): #{response['errors'][0]['message']}")
   end
+  puts response['data']
   return response['data']
 end
 
