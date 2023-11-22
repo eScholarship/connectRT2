@@ -153,14 +153,41 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   headers = { 'Content-Type' => 'application/json' }
   privileged and headers['Privileged'] = $privApiKey
   ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
+
+
+  # begin
+  #   retries ||= 0
+  #   response = HTTParty.post("#{$escholServer}/graphql",
+  #                :headers => headers,
+  #                :body => { variables: varHash, query: query }.to_json)
+  #   response.code != 200 and raise("Internal error (graphql): " +
+  #      "HTTP code #{response.code} - #{response.message}.\n" +
+  #      "#{response.body}")
+  # rescue Exception => exc
+  #   if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
+  #      (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout|SSL_connect/i)
+  #     retries += 1
+  #     if retries <= 10
+  #       puts "Empty code 500 response or exception: #{exc.to_s.inspect}. Will retry."
+  #       sleep 5
+  #       retry
+  #     end
+  #   end
+  #   raise
+  # end
+
+
   begin
     retries ||= 0
     response = HTTParty.post("#{$escholServer}/graphql",
                  :headers => headers,
                  :body => { variables: varHash, query: query }.to_json)
-    response.code != 200 and raise("Internal error (graphql): " +
-       "HTTP code #{response.code} - #{response.message}.\n" +
-       "#{response.body}")
+    if response.code != 200
+      raise("Internal error (graphql): " +
+      "HTTP code #{response.code} - #{response.message}.\n" +
+      "#{response.body}")
+      puts("DS: Returning empty string instead of data")
+      return("")
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
        (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout|SSL_connect/i)
@@ -173,6 +200,8 @@ def accessAPIQuery(query, vars = {}, privileged = false)
     end
     raise
   end
+
+
   if response['errors']
     puts "Full error text:"
     pp response['errors']
