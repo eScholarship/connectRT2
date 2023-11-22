@@ -399,12 +399,14 @@ def formatItemData(data, expand)
 
   if expand =~ /metadata/
     fullData = data.clone
-    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "root"}))
 
+    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "root"}))
+    metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
+    
     # puts metaXML
     metaXML = mimicDspaceXMLOutput(metaXML)
     # puts metaXML
-    
+
   else
     metaXML = ""
   end
