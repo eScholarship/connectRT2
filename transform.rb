@@ -447,48 +447,49 @@ def transformPeople(pieces, role)
   # Now build the resulting UCI author records.
   people = []
   person = nil
-  # pieces.split(/\|\| *\n/).each { |line|
-  pieces.split(/(\|\||\$) *\n/).each { |line|
-    next if (line == "" or line == "$")
-    line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
-    field, value = $1, $2
-    case field
-      when 'start-person'
-        person = {}
-      when 'lastname'
-        person[:nameParts] ||= {}
-        person[:nameParts][:lname] = value
-      when 'firstnames', 'initials'
-        # Prefer longer of firstname or initials
-        if !person[:nameParts][:fname] || person[:nameParts][:fname].size < value.size
-          person[:nameParts][:fname] = value
-        end
-      # Fix for filtering non-UC author emails
-      when 'resolved-user-email'
-        person[:email] = value
-      when 'email-address'
-        # Older version of above
-        # do nothing for now.
-      when 'resolved-user-orcid'
-        person[:orcid] = value
-      when 'identifier'
-        #puts "TODO: Handle identifiers like #{value.inspect}"
-        if value.include? "(orcid)"
-          # Orcids passed as: "xxxx-xxxx-xxxx-xxxx (orcid)" 
-          person[:orcid] = value.split[0]
-        end
-      when 'end-person'
-        if !person.empty?
-          role and person[:role] = role
-          people << person
-        end
-        person = nil
-      when 'address'
-        # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
-        # do nothing with it for now
-      else
-        raise("Unexpected person field #{field.inspect}")
-    end
+  pieces.split("$").each { |personPiece| 
+    next if personPiece == ""
+    personPiece.split(/\|\| *\n/).each { |line|
+      line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
+      field, value = $1, $2
+      case field
+        when 'start-person'
+          person = {}
+        when 'lastname'
+          person[:nameParts] ||= {}
+          person[:nameParts][:lname] = value
+        when 'firstnames', 'initials'
+          # Prefer longer of firstname or initials
+          if !person[:nameParts][:fname] || person[:nameParts][:fname].size < value.size
+            person[:nameParts][:fname] = value
+          end
+        # Fix for filtering non-UC author emails
+        when 'resolved-user-email'
+          person[:email] = value
+        when 'email-address'
+          # Older version of above
+          # do nothing for now.
+        when 'resolved-user-orcid'
+          person[:orcid] = value
+        when 'identifier'
+          #puts "TODO: Handle identifiers like #{value.inspect}"
+          if value.include? "(orcid)"
+            # Orcids passed as: "xxxx-xxxx-xxxx-xxxx (orcid)" 
+            person[:orcid] = value.split[0]
+          end
+        when 'end-person'
+          if !person.empty?
+            role and person[:role] = role
+            people << person
+          end
+          person = nil
+        when 'address'
+          # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
+          # do nothing with it for now
+        else
+          raise("Unexpected person field #{field.inspect}")
+      end
+    }
   }
 
   return people.empty? ? nil : people
