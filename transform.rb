@@ -447,7 +447,8 @@ def transformPeople(pieces, role)
   # Now build the resulting UCI author records.
   people = []
   person = nil
-  pieces.split(/\|\| *\n/).each { |line|
+  # pieces.split(/\|\| *\n/).each { |line|
+  pieces.split (/(\|\||\$) *\n/).each { |line|
     line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
     field, value = $1, $2
     case field
@@ -587,11 +588,7 @@ def mimicDspaceXMLOutput(input_xml)
     # Loop the author nodes and assemble the value text
     people_node.xpath("nodes").each do |person_node|
 
-      if value_text != ""
-        value_text << "$"
-      end 
-
-      value_text << "\n[start-person] ||\n"
+      value_text << "$\n[start-person] ||\n"
 
       person_children_array.each do |aMap|
 
