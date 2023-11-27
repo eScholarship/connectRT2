@@ -449,6 +449,7 @@ def transformPeople(pieces, role)
   person = nil
   # pieces.split(/\|\| *\n/).each { |line|
   pieces.split(/(\|\||\$) *\n/).each { |line|
+    next if line == ""
     line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
     field, value = $1, $2
     case field
