@@ -115,12 +115,12 @@ def parseMetadataEntries(feed)
       metaHash[key] << value
     elsif key == 'proceedings'
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
-    elsif key == 'subjects'
-      puts("Subject keys -- testing")
-      puts(value)
-      metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+    elsif metaHash.key?(key)
+        puts("double key #{key}:")
+        puts("   Existing value: #{metaHash[key]}")
+        puts("   New value: #{value}")
+        puts("   Skipping re-asignment (ie: Existing value used).")
     else
-      metaHash.key?(key) and raise("double key #{key}")
       metaHash[key] = value
     end
   }
@@ -181,15 +181,12 @@ def assignSeries(data, completionDate, metaHash)
   campusSeries = Set.new
   rgpoUnits = Set.new
 
-  puts("group check")
-  puts(groups)
-
   # Funder display names include texts like TRDRP, CHRP, etc.
   funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
 
   groups.each { |groupID, groupName|
   
-    puts("Group check: #{groupID}, #{groupName}")
+    # puts("Group check: #{groupID}, #{groupName}")
 
     # Regular campus and LBL
     if $groupToCampus[groupID]
@@ -220,12 +217,12 @@ def assignSeries(data, completionDate, metaHash)
   end
 
   # Check the two sets
-  puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
-  puts("Campus series check: #{campusSeries.to_a.join(',')}")
+  # puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
+  # puts("Campus series check: #{campusSeries.to_a.join(',')}")
 
   # Combine the two sets and convert to array 
   campusSeries = (campusSeries | rgpoUnits).to_a
-  puts("Combined campusSeries array: #{campusSeries}")
+  # puts("Combined campusSeries array: #{campusSeries}")
   
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
@@ -628,9 +625,34 @@ def mimicDspaceXMLOutput(input_xml)
 
 
   # -------------------------  
+  def nest_metadata_grants(grants_nodes, document)
+    nil
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = "funder-name"
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+
+    puts(grants_nodes.to_s)
+    combined_names = ""
+    grants_nodes.xpath(".").each do |node|
+      combined_names << node.value
+    end
+
+    meta_value.content = combined_names
+
+  end
+
+  # -------------------------  
   # Main function
   # noko_xml = input_xml
   noko_xml = Nokogiri::XML(input_xml)
+
+  puts("Noko test")
+  puts(noko_xml.to_s)
 
   # Loop the nested metadata nodes, nesting or removing them as needed
   noko_xml.xpath("/root/*").each do |node|
@@ -646,6 +668,10 @@ def mimicDspaceXMLOutput(input_xml)
       when "contributors"
         editor_node = node.dup()
         node.replace(nest_metadata_people(node, noko_xml, "editors"))
+
+#      when "grants"
+ #       grants_node = node.dup()
+  #      node.replace(nest_metadata_grants(node, noko_xml))
 
       when "localIDs"
         case node.css("scheme").text
