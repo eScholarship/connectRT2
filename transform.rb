@@ -625,24 +625,22 @@ def mimicDspaceXMLOutput(input_xml)
 
 
   # -------------------------  
-  def nest_metadata_grants(grants_nodes, document)
-    nil
+  def make_new_nested_metadata_node(value_array, document, output_key)
 
     # Create the new metadataentry node
     metadata_node = Nokogiri::XML::Node.new "metadata", document
 
     meta_key = Nokogiri::XML::Node.new "key", document
-    meta_key.content = "funder-name"
+    meta_key.content = output_key
 
     meta_value = Nokogiri::XML::Node.new "value", document
+    # Joins a string array with delimiter
+    meta_value.content = value_array * "|"
 
-    puts(grants_nodes.to_s)
-    combined_names = ""
-    grants_nodes.xpath(".").each do |node|
-      combined_names << node.value
-    end
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
 
-    meta_value.content = combined_names
+    return metadata_node
 
   end
 
@@ -653,6 +651,8 @@ def mimicDspaceXMLOutput(input_xml)
 
   # puts("Noko test")
   # puts(noko_xml.to_s)
+
+  grants_nested_value = Array.new
 
   # Loop the nested metadata nodes, nesting or removing them as needed
   noko_xml.xpath("/root/*").each do |node|
@@ -669,9 +669,9 @@ def mimicDspaceXMLOutput(input_xml)
         editor_node = node.dup()
         node.replace(nest_metadata_people(node, noko_xml, "editors"))
 
-#      when "grants"
- #       grants_node = node.dup()
-  #      node.replace(nest_metadata_grants(node, noko_xml))
+      when "grants"
+        grants_nested_value << node.value
+        node.unlink()
 
       when "localIDs"
         case node.css("scheme").text
@@ -698,6 +698,10 @@ def mimicDspaceXMLOutput(input_xml)
     end
 
   end
+
+  # Add the grants node with nested values
+  funder_name_node = make_new_nested_metadata_node(grants_nested_value, noko_xml, "funder-name")
+  noko_xml.at_css("root").add_child(funder_name_node)
 
   # Add the eschol-metadata update node
   eschol_meta_update_node = make_new_metadata_node("eschol-meta-update", "true", noko_xml)
