@@ -825,6 +825,9 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     if diff.empty?
       puts "No anticipated diff; skipping update."
       return nil
+    elsif diff == []
+      puts "Empty diff array; No anticipated diff; skipping update."
+      return nil
     end
 
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
