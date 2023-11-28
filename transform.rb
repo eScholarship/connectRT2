@@ -670,7 +670,7 @@ def mimicDspaceXMLOutput(input_xml)
         node.replace(nest_metadata_people(node, noko_xml, "editors"))
 
       when "grants"
-        grants_nested_value << node.value
+        grants_nested_value << node.text
         node.unlink()
 
       when "localIDs"
