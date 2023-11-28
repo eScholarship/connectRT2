@@ -116,10 +116,13 @@ def parseMetadataEntries(feed)
     elsif key == 'proceedings'
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     elsif metaHash.key?(key)
-        puts("double key #{key}:")
-        puts("   Existing value: #{metaHash[key]}")
-        puts("   New value: #{value}")
-        puts("   Skipping re-asignment (ie: Existing value used).")
+      # Skip duplicate grants and subjects
+      if key == 'grants' || key == 'subjects'
+        puts("Skipping ordinary double keys: #{key}")
+        nil
+      else
+        raise("Double key error: #{key}")
+      end  
     else
       metaHash[key] = value
     end
@@ -160,7 +163,7 @@ def assignSeries(data, completionDate, metaHash)
   # In general we want to retain existing units. Grab a list of those first.
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
-  puts("Units: #{data[:units]}")
+  # puts("Units: #{data[:units]}")
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
@@ -200,11 +203,11 @@ def assignSeries(data, completionDate, metaHash)
       funderDisplayNames.each { |displayName|
 
         if displayName.include?($groupToRGPO[groupID])
-          puts("RGPO grant found!!: #{displayName} / #{$groupToRGPO[groupID]}")
+          # puts("RGPO grant found!!: #{displayName} / #{$groupToRGPO[groupID]}")
           rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
           rgpoUnits << "rgpo_rw"
         else
-          puts("Not an RGPO grant: #{displayName} / #{$groupToRGPO[groupID]}")
+          # puts("Not an RGPO grant: #{displayName} / #{$groupToRGPO[groupID]}")
         end
       }
 
@@ -255,7 +258,7 @@ def assignSeries(data, completionDate, metaHash)
     a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
   }
 
-  puts(seriesKeys)
+  # puts(seriesKeys)
   return data[:units] = seriesKeys
 end
 
