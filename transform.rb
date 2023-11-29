@@ -116,13 +116,9 @@ def parseMetadataEntries(feed)
     elsif key == 'proceedings'
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     elsif metaHash.key?(key)
-      # Skip duplicate grants and subjects
-      if key == 'grants' || key == 'subjects'
-        puts("Skipping ordinary double keys: #{key}")
-        nil
-      else
-        raise("Double key error: #{key}")
-      end  
+      # Skip duplicate keys
+      puts("Double key: #{key} -- Taking the first value.")
+      nil
     else
       metaHash[key] = value
     end
