@@ -226,10 +226,9 @@ def assignSeries(data, completionDate, metaHash)
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
   ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
-  # puts("rgpoPat: #{rgpoPat}")
-  # old sort: a.sub('lbnl','0').sub(rgpoPat,'zz') <=> b.sub('lbnl','0').sub(rgpoPat,'zz')
+  
   campusSeries.sort { |a, b|
-    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('rgpo','2').sub('lbnl_ees','3').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('rgpo','2').sub('lbnl_ees','3').sub('lbnl','1').sub(rgpoPat,'zz')
   }.each { |s|
     series.key?(s) or series[s] = true
   }
