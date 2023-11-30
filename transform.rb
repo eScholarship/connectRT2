@@ -228,7 +228,7 @@ def assignSeries(data, completionDate, metaHash)
   ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
   
   campusSeries.sort { |a, b|
-    a.sub(ucPPPat,'0').sub('rgpo','2').sub('lbnl_ees','3').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('rgpo','2').sub('lbnl_ees','3').sub('lbnl','1').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }.each { |s|
     series.key?(s) or series[s] = true
   }
