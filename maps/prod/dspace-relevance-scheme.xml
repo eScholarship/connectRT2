@@ -1,49 +1,96 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
 <rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
   <rel:category name="publication">
+
+    <!-- Mask: Used to skip irrelevant pubs. -->
     <rel:masks>
       <rel:mask name="default">
+
+        <!-- 1. Mask: Quick functions -->
+        
+        <!-- Exclude any pub. without an eScholarship pub. record -->
+        <rel:exclude-objects-without-source>
+          <rel:source name="dspace" />
+        </rel:exclude-objects-without-source>
+
+        <!-- Exclude eScholarship source data for relevance -->
+        <rel:exclude-sources>
+          <rel:source name="dspace" />
+        </rel:exclude-sources>
+
+        <!-- Exclude Theses -->
+        <rel:exclude-objects-of-types>
+          <rel:type name="thesis-dissertation" />
+        </rel:exclude-objects-of-types>
+
+        <!-- 2. Mask: Object inspection -->
+        <!-- Anything *not* matching these conditions will be masked -->
         <rel:inspect-object>
           <rel:if>
             <rel:condition operator="not">
-              <rel:condition operator="or">
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,arxiv</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,crossref</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,dblp</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,epmc</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,manual</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,pubmed</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,repec</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,scopus</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,ssrn</rel:condition>
-                <rel:condition argument-field="object.record-sources" operator="contains-all-of">dspace,wos-lite</rel:condition>
+                <rel:condition operator="or">
+
+                <!-- Anything with a manual record -->
+                <rel:condition argument-field="object.record-sources" operator="contains-any-of">manual</rel:condition>
+
+                <!-- OR (Anything with a grant link AND LBL or RGPO authors) -->
+                <rel:condition operator="and">
+
+                  <rel:condition argument-field="object.approved-link-types" operator="contains-any-of">publication-grant-funded</rel:condition>
+                  <rel:condition argument-field="object.group-ids" operator="contains-any-of">684,776</rel:condition>
+
+                </rel:condition>
               </rel:condition>
             </rel:condition>
+            <!-- Result: mask object -->
             <rel:result>
               <rel:mask-object />
             </rel:result>
           </rel:if>
         </rel:inspect-object>
-        <!-- MH note: if one excludes source "dspace" below, no pushes ever go to eschol. 
-                      It's a handy way to turn on/off metadata updates :) 
-        -->
-        <!--<rel:exclude-sources>
-          <rel:source name="dspace" />
-        </rel:exclude-sources>-->
+        <!-- END Object Inspection -->
       </rel:mask>
     </rel:masks>
+
+    <!-- Aggregation: (Disabled) Select the data sources to include for hashing -->
+    <!--
+      NOTE: The below is an example. if you don't specify
+      an aggregation step, the default data source order
+      from the Data Source Mgmt. page is used.
+    -->
+    <!-- <rel:aggregations>
+      <rel:aggregation name="manual-verified-only">
+        <rel:source-precedence>
+          <rel:source name="manual" partition="verified" />
+        </rel:source-precedence>
+      </rel:aggregation>
+    </rel:aggregations> -->
+
+    <!-- Post-Aggregation Mask: (Disabled) -->
+    <!-- 
+      NOTE: An additiona masking step can be used here, which
+      is evalutated *after* the metadata has been selected
+      in the aggregation step. See the documentation for details.
+    -->
+
+    <!-- Hash Def: Used to calculate the hash value -->
     <rel:hash-definitions>
       <rel:hash-definition name="default">
         <rel:value from="title" />
         <rel:value from="authors">
           <rel:data-part name="person:lastname" />
           <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
         </rel:value>
         <rel:value from="parent-title" />
         <rel:value from="abstract" />
         <rel:value from="editors">
           <rel:data-part name="person:lastname" />
           <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
         </rel:value>
         <rel:value from="publisher" />
         <rel:value from="publication-status" />
@@ -53,7 +100,6 @@
         <rel:value from="issn" />
         <rel:value from="eissn" />
         <rel:value from="journal" />
-        <rel:value from="proceedings" />
         <rel:value from="volume" />
         <rel:value from="issue" />
         <rel:value from="pagination" />
@@ -67,6 +113,15 @@
         </rel:link-types>
       </rel:hash-definition>
     </rel:hash-definitions>
+
+    <!-- Relevance Definition Selector -->
+    <!--
+      NOTE: This section is evaluated *first*. You can include
+      logic conditions, along with the "choose" function to
+      select different masks, aggregations, post-aggregation masks,
+      and hash definitions for publications meeting various criteria.
+      (e.g. pubs with manual data sorces, or type 'monograph', etc.)
+    -->
     <rel:relevance-definition-selector>
       <rel:relevance-definition-selection mask="default" hash-definition="default" />
     </rel:relevance-definition-selector>
