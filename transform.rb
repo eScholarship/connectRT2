@@ -228,7 +228,7 @@ def assignSeries(data, completionDate, metaHash)
   ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
   
   campusSeries.sort { |a, b|
-    a.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }.each { |s|
     series.key?(s) or series[s] = true
   }
@@ -250,7 +250,7 @@ def assignSeries(data, completionDate, metaHash)
   # Re-sort the series keys before passing
   seriesKeys = series.keys
   seriesKeys = seriesKeys.sort { |a, b| 
-    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }
 
   # puts(seriesKeys)
