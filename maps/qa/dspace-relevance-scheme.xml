@@ -6,17 +6,14 @@
       <rel:mask name="default">
 
         <!-- 1. Mask: Quick functions -->
-        
         <!-- Exclude any pub. without an eScholarship pub. record -->
         <rel:exclude-objects-without-source>
           <rel:source name="dspace" />
         </rel:exclude-objects-without-source>
-
         <!-- Exclude eScholarship source data for relevance -->
         <rel:exclude-sources>
           <rel:source name="dspace" />
         </rel:exclude-sources>
-
         <!-- Exclude Theses -->
         <rel:exclude-objects-of-types>
           <rel:type name="thesis-dissertation" />
@@ -27,18 +24,11 @@
         <rel:inspect-object>
           <rel:if>
             <rel:condition operator="not">
-                <rel:condition operator="or">
-
-                <!-- Anything with a manual record -->
+              <rel:condition operator="or">
+                <!-- Pub. has a manual record -->
                 <rel:condition argument-field="object.record-sources" operator="contains-any-of">manual</rel:condition>
-
-                <!-- OR (Anything with a grant link AND LBL or RGPO authors) -->
-                <rel:condition operator="and">
-
-                  <rel:condition argument-field="object.approved-link-types" operator="contains-any-of">publication-grant-funded</rel:condition>
-                  <rel:condition argument-field="object.group-ids" operator="contains-any-of">684,776</rel:condition>
-
-                </rel:condition>
+                <!-- OR pub has grant links -->
+                <rel:condition argument-field="object.approved-link-types" operator="contains-any-of">publication-grant-funded</rel:condition>
               </rel:condition>
             </rel:condition>
             <!-- Result: mask object -->
@@ -53,20 +43,13 @@
 
     <!-- Aggregation: (Disabled) Select the data sources to include for hashing -->
     <!--
-      NOTE: The below is an example. if you don't specify
+      NOTE: This step is optional. if you don't specify
       an aggregation step, the default data source order
       from the Data Source Mgmt. page is used.
     -->
-    <!-- <rel:aggregations>
-      <rel:aggregation name="manual-verified-only">
-        <rel:source-precedence>
-          <rel:source name="manual" partition="verified" />
-        </rel:source-precedence>
-      </rel:aggregation>
-    </rel:aggregations> -->
 
     <!-- Post-Aggregation Mask: (Disabled) -->
-    <!-- 
+    <!--
       NOTE: An additiona masking step can be used here, which
       is evalutated *after* the metadata has been selected
       in the aggregation step. See the documentation for details.
@@ -113,7 +96,7 @@
         </rel:link-types>
       </rel:hash-definition>
     </rel:hash-definitions>
-
+    
     <!-- Relevance Definition Selector -->
     <!--
       NOTE: This section is evaluated *first*. You can include

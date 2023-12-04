@@ -116,9 +116,15 @@ def parseMetadataEntries(feed)
     elsif key == 'proceedings'
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     elsif metaHash.key?(key)
-      # Skip duplicate keys
-      puts("Double key: #{key} -- Taking the first value.")
-      nil
+
+      # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
+      # throw an error and halt processing.
+      raise("double key #{key}")
+
+      # POTENTIAL WORKAROUND: Take only the first value and do nothing.
+      # puts("Double key: #{key} -- Taking the first value.")
+      # nil
+
     else
       metaHash[key] = value
     end
@@ -159,7 +165,7 @@ def assignSeries(data, completionDate, metaHash)
   # In general we want to retain existing units. Grab a list of those first.
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
-  # puts("Units: #{data[:units]}")
+
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
@@ -184,8 +190,6 @@ def assignSeries(data, completionDate, metaHash)
   funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
 
   groups.each { |groupID, groupName|
-  
-    # puts("Group check: #{groupID}, #{groupName}")
 
     # Regular campus and LBL
     if $groupToCampus[groupID]
@@ -197,13 +201,9 @@ def assignSeries(data, completionDate, metaHash)
       # if the funder display names include RGPO strings (TRDRP, etc),
       # add that series and rgpo_rw. Otherwise, it's not an RGPO grant so ignore it.
       funderDisplayNames.each { |displayName|
-
         if displayName.include?($groupToRGPO[groupID])
-          # puts("RGPO grant found!!: #{displayName} / #{$groupToRGPO[groupID]}")
           rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
           rgpoUnits << "rgpo_rw"
-        else
-          # puts("Not an RGPO grant: #{displayName} / #{$groupToRGPO[groupID]}")
         end
       }
 
@@ -215,13 +215,8 @@ def assignSeries(data, completionDate, metaHash)
     rgpoUnits << "rgpo_rw"
   end
 
-  # Check the two sets
-  # puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
-  # puts("Campus series check: #{campusSeries.to_a.join(',')}")
-
   # Combine the two sets and convert to array 
   campusSeries = (campusSeries | rgpoUnits).to_a
-  # puts("Combined campusSeries array: #{campusSeries}")
   
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
@@ -253,7 +248,6 @@ def assignSeries(data, completionDate, metaHash)
     a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }
 
-  # puts(seriesKeys)
   return data[:units] = seriesKeys
 end
 
@@ -644,11 +638,7 @@ def mimicDspaceXMLOutput(input_xml)
 
   # -------------------------  
   # Main function
-  # noko_xml = input_xml
   noko_xml = Nokogiri::XML(input_xml)
-
-  # puts("Noko test")
-  # puts(noko_xml.to_s)
 
   grants_nested_value = Array.new
 

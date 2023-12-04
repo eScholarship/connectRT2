@@ -161,10 +161,12 @@ def accessAPIQuery(query, vars = {}, privileged = false)
                  :headers => headers,
                  :body => { variables: varHash, query: query }.to_json)
     if response.code != 200
-      puts("Internal error (graphql): HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
 
-      # The following code prevents connectRT2 from passing graphQL's 500 errors (e.g. BigInt) to Elements.
-      # Instead, it prints the error, then proceeds operating with an empty string.
+      # POTENTIAL PROBLEM: When our graphQL returns non-200 (usually 500), error and exit.
+      raise("Internal error (graphql): HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
+
+      # POTENTIAL WORKAROUND: The following code prevents connectRT2 from passing graphQL's 500 errors
+      # (e.g. BigInt) to Elements. Instead, it prints the error, then proceeds operating with an empty string.
       # puts "Returning empty graphQL results for testing purposes."
       # dummy_data = {"item"=>{}}
       # return dummy_data
@@ -412,12 +414,11 @@ def formatItemData(data, expand)
   if expand =~ /metadata/
     fullData = data.clone
 
+    # In order to facilitate mimicing the DSapce output, we nest the metadata inside of a "root" node
     metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "root"}))
     metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
-    
-    # puts metaXML
+
     metaXML = mimicDspaceXMLOutput(metaXML)
-    # puts metaXML
 
   else
     metaXML = ""
@@ -515,7 +516,7 @@ def formatItemData(data, expand)
 end
 
 ###################################################################################################
-get %r{/dspace-rest/(items|handle)/(.*)} do 
+get %r{/dspace-rest/(items|handle)/(.*)} do
   verifyLoggedIn
   request.path =~ /(qt\w{8})/ or halt(404, "Invalid item ID")
   itemID = $1
@@ -758,7 +759,6 @@ end
 
 ###################################################################################################
 def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
-  # puts "In processMetaUpdate."
 
   begin
     if !metaHash.key?('groups')
