@@ -812,14 +812,15 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
 
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
 
-    # During development, let's re-query the data to see what diffs there might be
-    newData = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or raise
-    diff = JsonDiff.diff(data, newData, include_was: true)
-    diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing
-    #puts "\nold data:"; pp data
-    #puts "\nnew data:"; pp newData
-    puts "\nFinal metadata diff:"
-    pp diff
+    # The folowing block is for testing.
+    # It re-queries the newly-updated item, and reports the final metadata diff.
+    # Owing to our still-extant mismatches in authors (etc) this diff will often be "[]"
+    # newData = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or raise
+    # diff = JsonDiff.diff(data, newData, include_was: true)
+    # diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing
+    # puts "\nold data:"; pp data
+    # puts "\nnew data:"; pp newData
+    # puts "\nFinal metadata diff:"; pp diff
 
     return nil  # content length zero, and HTTP 200 OK
   rescue Exception => e
