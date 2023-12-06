@@ -115,12 +115,20 @@ def parseMetadataEntries(feed)
     if key == 'keywords'
       metaHash[key] ||= []
       metaHash[key] << value
+
     elsif key == 'subjects' || key == 'disciplines'
       puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
       metaHash[key] ||= []
       metaHash[key] << value
+      
     elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+
+    # Workaround 
+    elsif key == 'suppFiles'
+      puts ("Non-kewords double: suppFiles")
+      metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+
     elsif metaHash.key?(key)
 
       # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
