@@ -106,7 +106,7 @@ end
 
 ###################################################################################################
 def parseMetadataEntries(feed)
-  puts(feed)
+
   metaHash = {}
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
@@ -135,7 +135,6 @@ def parseMetadataEntries(feed)
     end
   }
 
-  puts(metaHash)
   return metaHash
 end
 
