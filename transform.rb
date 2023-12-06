@@ -112,7 +112,7 @@ def parseMetadataEntries(feed)
     key = ent.text_at('key')
     value = ent.text_at('value')
 
-    if key == 'keywords' || key == 'subjects'
+    if key == 'keywords' || key == 'subjects' || key == 'disciplines'
       metaHash[key] ||= []
       metaHash[key] << value
     elsif key == 'proceedings' 
