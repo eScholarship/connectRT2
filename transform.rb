@@ -106,29 +106,26 @@ end
 
 ###################################################################################################
 def parseMetadataEntries(feed)
-
   metaHash = {}
+
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
     value = ent.text_at('value')
 
-    if metaHash.key?(key)
+    if key == 'keywords' || key == 'subjects'
       metaHash[key] ||= []
       metaHash[key] << value
-#    if key == 'keywords'
- #     metaHash[key] ||= []
-  #    metaHash[key] << value
-    elsif key == 'proceedings'
+    elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     elsif metaHash.key?(key)
 
       # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
       # throw an error and halt processing.
-      raise("double key #{key}")
+      # raise("double key #{key}")
 
       # POTENTIAL WORKAROUND: Take only the first value and do nothing.
-      # puts("Double key: #{key} -- Taking the first value.")
-      # nil
+      puts("Double key: #{key} -- Taking the first value.")
+      nil
 
     else
       metaHash[key] = value
