@@ -112,7 +112,11 @@ def parseMetadataEntries(feed)
     key = ent.text_at('key')
     value = ent.text_at('value')
 
-    if key == 'keywords' || key == 'subjects' || key == 'disciplines'
+    if key == 'keywords'
+      metaHash[key] ||= []
+      metaHash[key] << value
+    elsif key == 'subjects' || key == 'disciplines'
+      puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
       metaHash[key] ||= []
       metaHash[key] << value
     elsif key == 'proceedings' 
