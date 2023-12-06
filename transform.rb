@@ -121,11 +121,11 @@ def parseMetadataEntries(feed)
 
       # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
       # throw an error and halt processing.
-      # raise("double key #{key}")
+      raise("double key #{key}")
 
       # POTENTIAL WORKAROUND: Take only the first value and do nothing.
-      puts("Double key: #{key} -- Taking the first value.")
-      nil
+      # puts("Double key: #{key} -- Taking the first value.")
+      # nil
 
     else
       metaHash[key] = value
