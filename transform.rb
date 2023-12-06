@@ -106,13 +106,18 @@ end
 
 ###################################################################################################
 def parseMetadataEntries(feed)
+  puts(feed)
   metaHash = {}
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
     value = ent.text_at('value')
-    if key == 'keywords'
+
+    if metaHash.key?(key)
       metaHash[key] ||= []
       metaHash[key] << value
+#    if key == 'keywords'
+ #     metaHash[key] ||= []
+  #    metaHash[key] << value
     elsif key == 'proceedings'
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
     elsif metaHash.key?(key)
@@ -129,6 +134,8 @@ def parseMetadataEntries(feed)
       metaHash[key] = value
     end
   }
+
+  puts(metaHash)
   return metaHash
 end
 
