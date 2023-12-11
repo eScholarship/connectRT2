@@ -153,14 +153,24 @@ def accessAPIQuery(query, vars = {}, privileged = false)
   headers = { 'Content-Type' => 'application/json' }
   privileged and headers['Privileged'] = $privApiKey
   ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
+
+  # Send the HTTP request to the graphQL endpoint
   begin
     retries ||= 0
     response = HTTParty.post("#{$escholServer}/graphql",
                  :headers => headers,
                  :body => { variables: varHash, query: query }.to_json)
-    response.code != 200 and raise("Internal error (graphql): " +
-       "HTTP code #{response.code} - #{response.message}.\n" +
-       "#{response.body}")
+    if response.code != 200
+
+      # POTENTIAL PROBLEM: When our graphQL returns non-200 (usually 500), error and exit.
+      raise("Internal error (graphql): HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
+
+      # POTENTIAL WORKAROUND: The following code prevents connectRT2 from passing graphQL's 500 errors
+      # (e.g. BigInt) to Elements. Instead, it prints the error, then proceeds operating with an empty string.
+      # puts "Returning empty graphQL results for testing purposes."
+      # dummy_data = {"item"=>{}}
+      # return dummy_data
+    end
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
        (exc.to_s =~ /execution expired|Failed to open TCP connection|Connection reset by peer|ReadTimeout|SSL_connect/i)
@@ -172,12 +182,16 @@ def accessAPIQuery(query, vars = {}, privileged = false)
       end
     end
     raise
+
   end
+
+
   if response['errors']
     puts "Full error text:"
     pp response['errors']
     raise("Internal error (graphql): #{response['errors'][0]['message']}")
   end
+
   return response['data']
 end
 
@@ -399,8 +413,13 @@ def formatItemData(data, expand)
 
   if expand =~ /metadata/
     fullData = data.clone
-    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "metadata"}))
+
+    # In order to facilitate mimicing the DSapce output, we nest the metadata inside of a "root" node
+    metaXML = stripHTML(XmlSimple.xml_out(fullData, {suppress_empty: nil, noattr: true, rootname: "root"}))
     metaXML.sub!("<metadata>", "<metadata><key>eschol-meta-update</key><value>true</value>")
+
+    metaXML = mimicDspaceXMLOutput(metaXML)
+
   else
     metaXML = ""
   end
@@ -493,6 +512,7 @@ def formatItemData(data, expand)
       <withdrawn><%= data.dig("status") == "WITHDRAWN" %></withdrawn>
       <%== bitstreams %>
     </item>''', binding, xml_header: false)
+
 end
 
 ###################################################################################################
@@ -739,7 +759,6 @@ end
 
 ###################################################################################################
 def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
-  puts "In processMetaUpdate."
 
   begin
     if !metaHash.key?('groups')
@@ -786,6 +805,9 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     if diff.empty?
       puts "No anticipated diff; skipping update."
       return nil
+    elsif diff == []
+      puts "Empty diff array; No anticipated diff; skipping update."
+      return nil
     end
 
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
@@ -796,8 +818,7 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing
     #puts "\nold data:"; pp data
     #puts "\nnew data:"; pp newData
-    puts "\nFinal metadata diff:"
-    pp diff
+    puts "\nFinal metadata diff:"; pp diff
 
     return nil  # content length zero, and HTTP 200 OK
   rescue Exception => e

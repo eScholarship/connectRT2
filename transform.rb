@@ -107,19 +107,43 @@ end
 ###################################################################################################
 def parseMetadataEntries(feed)
   metaHash = {}
+
   feed.xpath(".//metadataentry").each { |ent|
     key = ent.text_at('key')
     value = ent.text_at('value')
+
     if key == 'keywords'
       metaHash[key] ||= []
       metaHash[key] << value
-    elsif key == 'proceedings'
+
+    elsif key == 'subjects' || key == 'disciplines'
+      puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
+      metaHash[key] ||= []
+      metaHash[key] << value
+      
+    elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+
+    # Workaround 
+    elsif key == 'suppFiles'
+      puts ("Non-kewords double: suppFiles")
+      metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+
+    elsif metaHash.key?(key)
+
+      # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
+      # throw an error and halt processing.
+      raise("double key #{key}")
+
+      # POTENTIAL WORKAROUND: Take only the first value and do nothing.
+      # puts("Double key: #{key} -- Taking the first value.")
+      # nil
+
     else
-      metaHash.key?(key) and raise("double key #{key}")
       metaHash[key] = value
     end
   }
+
   return metaHash
 end
 
@@ -156,7 +180,7 @@ def assignSeries(data, completionDate, metaHash)
   # In general we want to retain existing units. Grab a list of those first.
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
-  puts("Units: #{data[:units]}")
+
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
@@ -177,15 +201,10 @@ def assignSeries(data, completionDate, metaHash)
   campusSeries = Set.new
   rgpoUnits = Set.new
 
-  puts("group check")
-  puts(groups)
-
   # Funder display names include texts like TRDRP, CHRP, etc.
   funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
 
   groups.each { |groupID, groupName|
-  
-    puts("Group check: #{groupID}, #{groupName}")
 
     # Regular campus and LBL
     if $groupToCampus[groupID]
@@ -197,13 +216,9 @@ def assignSeries(data, completionDate, metaHash)
       # if the funder display names include RGPO strings (TRDRP, etc),
       # add that series and rgpo_rw. Otherwise, it's not an RGPO grant so ignore it.
       funderDisplayNames.each { |displayName|
-
         if displayName.include?($groupToRGPO[groupID])
-          puts("RGPO grant found!!: #{displayName} / #{$groupToRGPO[groupID]}")
           rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
           rgpoUnits << "rgpo_rw"
-        else
-          puts("Not an RGPO grant: #{displayName} / #{$groupToRGPO[groupID]}")
         end
       }
 
@@ -215,21 +230,15 @@ def assignSeries(data, completionDate, metaHash)
     rgpoUnits << "rgpo_rw"
   end
 
-  # Check the two sets
-  puts("RGPO Units check: #{rgpoUnits.to_a.join(',')}")
-  puts("Campus series check: #{campusSeries.to_a.join(',')}")
-
   # Combine the two sets and convert to array 
   campusSeries = (campusSeries | rgpoUnits).to_a
-  puts("Combined campusSeries array: #{campusSeries}")
   
   # Add campus series in sorted order (special: always sort lbnl first, and rgpo last)
   rgpoPat = Regexp.compile("^(#{rgpoUnits.to_a.join("|")})$")
   ucPPPat = Regexp.compile('^uc[\w]{1,2}_postprints')
-  # puts("rgpoPat: #{rgpoPat}")
-  # old sort: a.sub('lbnl','0').sub(rgpoPat,'zz') <=> b.sub('lbnl','0').sub(rgpoPat,'zz')
+  
   campusSeries.sort { |a, b|
-    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }.each { |s|
     series.key?(s) or series[s] = true
   }
@@ -251,10 +260,9 @@ def assignSeries(data, completionDate, metaHash)
   # Re-sort the series keys before passing
   seriesKeys = series.keys
   seriesKeys = seriesKeys.sort { |a, b| 
-    a.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl','1').sub(rgpoPat,'zz')
+    a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }
 
-  puts(seriesKeys)
   return data[:units] = seriesKeys
 end
 
@@ -443,47 +451,265 @@ def transformPeople(pieces, role)
   # Now build the resulting UCI author records.
   people = []
   person = nil
-  pieces.split(/\|\| *\n/).each { |line|
-    line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
-    field, value = $1, $2
-    case field
-      when 'start-person'
-        person = {}
-      when 'lastname'
-        person[:nameParts] ||= {}
-        person[:nameParts][:lname] = value
-      when 'firstnames', 'initials'
-        # Prefer longer of firstname or initials
-        if !person[:nameParts][:fname] || person[:nameParts][:fname].size < value.size
-          person[:nameParts][:fname] = value
-        end
-      # Fix for filtering non-UC author emails
-      when 'resolved-user-email'
-        person[:email] = value
-      when 'email-address'
-        # Older version of above
-        # do nothing for now.
-      when 'resolved-user-orcid'
-        person[:orcid] = value
-      when 'identifier'
-        #puts "TODO: Handle identifiers like #{value.inspect}"
-        if value.include? "(orcid)"
-          # Orcids passed as: "xxxx-xxxx-xxxx-xxxx (orcid)" 
-          person[:orcid] = value.split[0]
-        end
-      when 'end-person'
-        if !person.empty?
-          role and person[:role] = role
-          people << person
-        end
-        person = nil
-      when 'address'
-        # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
-        # do nothing with it for now
-      else
-        raise("Unexpected person field #{field.inspect}")
-    end
+  pieces.split("$").each { |personPiece| 
+    next if personPiece == ""
+    personPiece.split(/\|\| *\n/).each { |line|
+      line =~ %r{\[([-a-z]+)\] ([^|]*)} or raise("can't parse people line #{line.inspect}")
+      field, value = $1, $2
+      case field
+        when 'start-person'
+          person = {}
+        when 'lastname'
+          person[:nameParts] ||= {}
+          person[:nameParts][:lname] = value
+        when 'firstnames', 'initials'
+          # Prefer longer of firstname or initials
+          if !person[:nameParts][:fname] || person[:nameParts][:fname].size < value.size
+            person[:nameParts][:fname] = value
+          end
+        # Fix for filtering non-UC author emails
+        when 'resolved-user-email'
+          person[:email] = value
+        when 'email-address'
+          # Older version of above
+          # do nothing for now.
+        when 'resolved-user-orcid'
+          person[:orcid] = value
+        when 'identifier'
+          #puts "TODO: Handle identifiers like #{value.inspect}"
+          if value.include? "(orcid)"
+            # Orcids passed as: "xxxx-xxxx-xxxx-xxxx (orcid)" 
+            person[:orcid] = value.split[0]
+          end
+        when 'end-person'
+          if !person.empty?
+            role and person[:role] = role
+            people << person
+          end
+          person = nil
+        when 'address'
+          # e.g. "University of California, Berkeley\nBerkeley\nUnited States"
+          # do nothing with it for now
+        else
+          raise("Unexpected person field #{field.inspect}")
+      end
+    }
   }
 
   return people.empty? ? nil : people
+end
+
+###################################################################################################
+# DS 2023-10-24
+# This code taxes the existing simple
+def mimicDspaceXMLOutput(input_xml)
+
+  # -------------------------
+  def nest_metadata_simple(node, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = node.name
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = node.text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
+  def make_new_metadata_node(key, value, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = key
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = value
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
+  def convert_local_id(key_name, node, document)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = key_name
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = node.css("id").text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------
+  def nest_metadata_people(people_node, document, output_key)
+
+    def get_new_vt(new_tag, new_text)
+      
+      if new_text == nil
+        new_text = ""
+      end
+
+      return("[" << new_tag << "] " << new_text << "|| \n")
+    end
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    # Text string for metadata value
+    value_text = ""
+
+    # Map for translating escholarship node nades to elements
+    personMap = Struct.new(:xpath, :elements_name)
+    person_children_array = Array[
+      personMap.new('nameParts/lname', 'lastname'),
+      personMap.new('nameParts/fname', 'firstnames'),
+      personMap.new('nameParts/fname', 'initials'),
+      personMap.new('email', 'resolved-user-email'),
+      personMap.new('orcid', 'resolved-user-orcid'),
+    ]
+
+    # Loop the author nodes and assemble the value text
+    people_node.xpath("nodes").each do |person_node|
+
+      value_text << "$\n[start-person] ||\n"
+
+      person_children_array.each do |aMap|
+
+        if aMap.elements_name != "initials"
+          child_text = person_node.xpath(aMap.xpath).text
+          (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
+
+        else
+          # The initials calculation is slightly hacky
+          child_text = person_node.xpath(aMap.xpath).text
+          child_text = child_text.upcase()[0]
+          (value_text << get_new_vt(aMap.elements_name, child_text)) unless child_text == ""
+
+        end
+
+      end
+
+      value_text << "[end-person] \n"
+
+    end
+
+    # Add the key and value as children nodes
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = output_key
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    meta_value.content = value_text
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+
+  # -------------------------  
+  def make_new_nested_metadata_node(value_array, document, output_key)
+
+    # Create the new metadataentry node
+    metadata_node = Nokogiri::XML::Node.new "metadata", document
+
+    meta_key = Nokogiri::XML::Node.new "key", document
+    meta_key.content = output_key
+
+    meta_value = Nokogiri::XML::Node.new "value", document
+    # Joins a string array with delimiter
+    meta_value.content = value_array * "|"
+
+    metadata_node.add_child(meta_key)
+    metadata_node.add_child(meta_value)
+
+    return metadata_node
+
+  end
+
+  # -------------------------  
+  # Main function
+  noko_xml = Nokogiri::XML(input_xml)
+
+  grants_nested_value = Array.new
+
+  # Loop the nested metadata nodes, nesting or removing them as needed
+  noko_xml.xpath("/root/*").each do |node|
+
+    # Switch for certain nodes which return nested results
+    case node.name
+
+      # TK TK -- Copy author node, we still need it for the xwalk -- can delete the duplicates, I think
+      when "authors"
+        author_nodes = node.dup()
+        node.replace(nest_metadata_people(node, noko_xml, "authors"))
+
+      when "contributors"
+        editor_node = node.dup()
+        node.replace(nest_metadata_people(node, noko_xml, "editors"))
+
+      when "grants"
+        grants_nested_value << node.text
+        node.unlink()
+
+      when "localIDs"
+        case node.css("scheme").text
+          when "OA_PUB_ID"
+            node.replace(convert_local_id("elements-pub-id", node, noko_xml))
+          when "DOI"
+            node.replace(convert_local_id("doi", node, noko_xml))
+          else
+            node.unlink()
+        end
+
+      when "units"
+        node.unlink()
+
+      when "type"
+        # A unique node name is required for xwalk harvest object-type-selector
+        type_node = node.dup()
+        node.name = "eschol-type"
+        node.replace(nest_metadata_simple(node, noko_xml))
+
+      else
+        node.replace(nest_metadata_simple(node, noko_xml))
+
+    end
+
+  end
+
+  # Add the grants node with nested values
+  funder_name_node = make_new_nested_metadata_node(grants_nested_value, noko_xml, "funder-name")
+  noko_xml.at_css("root").add_child(funder_name_node)
+
+  # Add the eschol-metadata update node
+  eschol_meta_update_node = make_new_metadata_node("eschol-meta-update", "true", noko_xml)
+  noko_xml.at_css("root").add_child(eschol_meta_update_node)
+
+  return(noko_xml.xpath("/root/*").to_s())
+
 end
