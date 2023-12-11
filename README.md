@@ -12,3 +12,8 @@ These are the steps to manuall restart:
 * Kill #### ####
 * "ps -ax | grep puma" to confirm kills
 * Eye start apache connectrt2
+
+---
+
+### Significant changes, Dec. 2023:
+https://github.com/eScholarship/connectRT2/pull/51
