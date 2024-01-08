@@ -127,7 +127,9 @@ def parseMetadataEntries(feed)
     # Workaround 
     elsif key == 'suppFiles'
       puts ("Non-kewords double: suppFiles")
-      metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+      # metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
+      metaHash[key] ||= []
+      metaHash[key] << value
 
     elsif metaHash.key?(key)
 
