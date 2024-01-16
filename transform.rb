@@ -124,12 +124,11 @@ def parseMetadataEntries(feed)
     elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
-    # Workaround 
+    # Workaround for supp, take only the first value.
+    # This 
     elsif key == 'suppFiles'
       puts ("Non-kewords double: suppFiles")
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
-      # metaHash[key] ||= []
-      # metaHash[key] << value
 
     elsif metaHash.key?(key)
 
@@ -150,12 +149,16 @@ def parseMetadataEntries(feed)
 end
 
 ###################################################################################################
-def convertPubDate(pubDate)
+def convertPubDate(pubDate, reportingDate1)
+
+  # The fallback is used if pubDate = nil.
+  fallback_date = reportingDate1 ? reportingDate1 : Date.today.iso8601
+
   case pubDate
     when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
     when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
     when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
-    when nil;                          Date.today.iso8601
+    when nil;                          fallback_date
     else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
   end
 end
@@ -437,7 +440,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:ucpmsPubType] = elementsPubType
 
   # History
-  data[:published] = convertPubDate(metaHash.delete('publication-date'))
+  data[:published] = convertPubDate(metaHash.delete('publication-date'),metaHash.delete('reporting-date-1'))
   data[:submitterEmail] = submitterEmail
 
   # Custom Citation Field
