@@ -149,19 +149,26 @@ def parseMetadataEntries(feed)
 end
 
 ###################################################################################################
-def convertPubDate(pubDate, reportingDate1)
-
-  # The fallback is used if pubDate = nil.
-  fallback_date = reportingDate1 ? reportingDate1 : Date.today.iso8601
-
+def convertPubDate(pubDate, reportingDate1, depositDate)
+  
+  # Note: depositDate is the eScholarship item's deposit date
+  fallback_date = ''
+  if reportingDate1 != nil
+    fallback_date = reportingDate1
+  elsif depositDate != nil
+    fallback_date = depositDate
+  else
+    fallback_date = Date.today.iso8601
+  end
+  
   case pubDate
     when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
     when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
     when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
     when nil;                          fallback_date
     else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
-  end
-end
+  end   
+end 
 
 ###################################################################################################
 def convertFileVersion(fileVersion)
@@ -440,7 +447,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:ucpmsPubType] = elementsPubType
 
   # History
-  data[:published] = convertPubDate(metaHash.delete('publication-date'),metaHash.delete('reporting-date-1'))
+  data[:published] = convertPubDate(metaHash.delete("publication-date"),metaHash.delete("reporting-date-1"),metaHash["deposit-date"])
   data[:submitterEmail] = submitterEmail
 
   # Custom Citation Field
