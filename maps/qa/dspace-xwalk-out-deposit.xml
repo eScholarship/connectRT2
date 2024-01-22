@@ -10,6 +10,9 @@
       <xwalk:field-mapping to="elements-pub-id">
         <xwalk:field-source from="object.id" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="reporting-date-1">
+        <xwalk:field-source from="object.reporting-date-1" />
+      </xwalk:field-mapping>
       <xwalk:field-mapping to="authors" is-list="true" separator="||&#xD;&#xA;">
         <xwalk:field-source from="authors">
           <xwalk:field-source value="start" prefix="$&#xD;&#xA;[start-person]" value-map="no-text" />
@@ -217,6 +220,7 @@
   <xwalk:field-authority-lists>
     <xwalk:field-authority-list name="eschol-upd-auth">
       <xwalk:field-authority field-name="elements-pub-id" />
+      <xwalk:field-authority field-name="reporting-date-1" />
       <xwalk:field-authority field-name="authors" />
       <xwalk:field-authority field-name="editors" />
       <xwalk:field-authority field-name="groups" />
