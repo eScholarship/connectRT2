@@ -112,33 +112,33 @@ def parseMetadataEntries(feed)
     key = ent.text_at('key')
     value = ent.text_at('value')
 
+    # Multiple keywords are expected.
+    # This array is handled later, via the convertKeywords() function.
     if key == 'keywords'
       metaHash[key] ||= []
       metaHash[key] << value
 
+    # These keys may also be multiple; However, but aren't used in the PUT req.
     elsif key == 'subjects' || key == 'disciplines'
       puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
       metaHash[key] ||= []
       metaHash[key] << value
-      
+    
+    # Proceedings can also contain multiples, but aren't used in the PUT req.
     elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
-    # Workaround for supp, take only the first value.
-    # This 
+    # Similar to Proceedings above.
+    # Note: Elements sends several /bitstream requests with which it populates it's
+    #       supplementary file info in its UI.
     elsif key == 'suppFiles'
       puts ("Non-kewords double: suppFiles")
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
+    # Otherwise, When an elements pub has > 1 eScholarship record, throw an error and halt.
+    # See above for workaround strategies if required.
     elsif metaHash.key?(key)
-
-      # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
-      # throw an error and halt processing.
       raise("double key #{key}")
-
-      # POTENTIAL WORKAROUND: Take only the first value and do nothing.
-      # puts("Double key: #{key} -- Taking the first value.")
-      # nil
 
     else
       metaHash[key] = value

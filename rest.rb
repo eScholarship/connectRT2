@@ -161,15 +161,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
                  :headers => headers,
                  :body => { variables: varHash, query: query }.to_json)
     if response.code != 200
-
-      # POTENTIAL PROBLEM: When our graphQL returns non-200 (usually 500), error and exit.
       raise("Internal error (graphql): HTTP code #{response.code} - #{response.message}.\n" + "#{response.body}")
-
-      # POTENTIAL WORKAROUND: The following code prevents connectRT2 from passing graphQL's 500 errors
-      # (e.g. BigInt) to Elements. Instead, it prints the error, then proceeds operating with an empty string.
-      # puts "Returning empty graphQL results for testing purposes."
-      # dummy_data = {"item"=>{}}
-      # return dummy_data
     end
   rescue Exception => exc
     if (response && [500,502,504].include?(response.code) && response.body.length < 200) ||
