@@ -790,10 +790,13 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     d2 = removeNils(JSON.parse(jsonMeta.to_json))
     %w{pubRelation sourceFeedLink sourceID sourceName submitterEmail keywords}.each { |key| d2.delete(key) }
 
-    #puts "\nd1="; pp d1
-    #puts "\nd2="; pp d2
+    # FOR DEBUGGING, you can output the JSONs which are compared and saved to "diff"
+    # puts "\nd1="; pp d1
+    # puts "\nd2="; pp d2
+
     diff = JsonDiff.diff(d1, d2, include_was: true)
     puts "Anticipated diff:"; pp diff
+
     if diff.empty?
       puts "No anticipated diff; skipping update."
       return nil
@@ -804,8 +807,10 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
 
     approveItem(itemID, { meta: jsonMeta }, replaceOnly: :metadata)
 
-    # During development, let's re-query the data to see what diffs there might be
-    # DS -- removed on 2023-12-13 to test effect on queue speed.
+    # FOR DEBUGGING, you can re-query the data to see what diffs there might be
+    # DS removed this on 2023-12-13 to speed up the processing queue: It sends
+    # an additional GET to eScholarship, practically doubling per-item processing time
+
     # newData = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or raise
     # diff = JsonDiff.diff(data, newData, include_was: true)
     # diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing

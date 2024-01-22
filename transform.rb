@@ -375,6 +375,9 @@ end
 # existing eschol data in, it will be retained if Elements doesn't override it.
 def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
+  # FOR DEBUGGING, you can output the raw metaHash (the Elements input)
+  # puts(metaHash)
+
   # eSchol ARK identifier (provisional ID minted previously for new items)
   data = oldData ? oldData.clone : {}
   data[:id] = ark
