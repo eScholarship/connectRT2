@@ -118,13 +118,15 @@ def parseMetadataEntries(feed)
       metaHash[key] ||= []
       metaHash[key] << value
 
-    # These keys may also be multiple; However, but aren't used in the PUT req.
+    # These keys may also be multiple; However, they aren't used in the PUT req.
     elsif key == 'subjects' || key == 'disciplines'
       puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
       metaHash[key] ||= []
       metaHash[key] << value
     
-    # Proceedings can also contain multiples, but aren't used in the PUT req.
+    # Proceedings can also contain multiples, but this is rare in practice.
+    # In eScholarship, this is used in place of the journal title for conference papers,
+    # We only take the first value to avoid 500 errors.
     elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
@@ -132,7 +134,7 @@ def parseMetadataEntries(feed)
     # Note: Elements sends several /bitstream requests with which it populates it's
     #       supplementary file info in its UI.
     elsif key == 'suppFiles'
-      puts ("Non-kewords double: suppFiles")
+      puts ("Non-keywords double: suppFiles")
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
     # Otherwise, When an elements pub has > 1 eScholarship record, throw an error and halt.
@@ -450,7 +452,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:ucpmsPubType] = elementsPubType
 
   # History
-  data[:published] = convertPubDate(metaHash.delete("publication-date"),metaHash.delete("reporting-date-1"),metaHash["deposit-date"])
+  data[:published] = convertPubDate(
+    metaHash.delete("publication-date"),
+    metaHash.delete("reporting-date-1"),
+    metaHash["deposit-date"]
+  )
   data[:submitterEmail] = submitterEmail
 
   # Custom Citation Field
