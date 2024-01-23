@@ -112,32 +112,35 @@ def parseMetadataEntries(feed)
     key = ent.text_at('key')
     value = ent.text_at('value')
 
+    # Multiple keywords are expected.
+    # This array is handled later, via the convertKeywords() function.
     if key == 'keywords'
       metaHash[key] ||= []
       metaHash[key] << value
 
+    # These keys may also be multiple; However, they aren't used in the PUT req.
     elsif key == 'subjects' || key == 'disciplines'
       puts ("Non-kewords double key: #{key} -- Pushing value into array: #{value}")
       metaHash[key] ||= []
       metaHash[key] << value
-      
+    
+    # Proceedings can also contain multiples, but this is rare in practice.
+    # In eScholarship, this is used in place of the journal title for conference papers,
+    # We only take the first value to avoid 500 errors.
     elsif key == 'proceedings' 
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
-    # Workaround 
+    # Similar to Proceedings above.
+    # Note: Elements sends several /bitstream requests with which it populates it's
+    #       supplementary file info in its UI.
     elsif key == 'suppFiles'
-      puts ("Non-kewords double: suppFiles")
+      puts ("Non-keywords double: suppFiles")
       metaHash.key?(key) or metaHash[key] = value   # Take first one only (for now at least)
 
+    # Otherwise, When an elements pub has > 1 eScholarship record, throw an error and halt.
+    # See above for workaround strategies if required.
     elsif metaHash.key?(key)
-
-      # POTENTIAL PROBLEM: When an elements pub has > 1 eScholarship record,
-      # throw an error and halt processing.
       raise("double key #{key}")
-
-      # POTENTIAL WORKAROUND: Take only the first value and do nothing.
-      # puts("Double key: #{key} -- Taking the first value.")
-      # nil
 
     else
       metaHash[key] = value
@@ -148,15 +151,26 @@ def parseMetadataEntries(feed)
 end
 
 ###################################################################################################
-def convertPubDate(pubDate)
+def convertPubDate(pubDate, reportingDate1, depositDate)
+  
+  # Note: depositDate is the eScholarship item's deposit date
+  fallback_date = ''
+  if reportingDate1 != nil
+    fallback_date = reportingDate1
+  elsif depositDate != nil
+    fallback_date = depositDate
+  else
+    fallback_date = Date.today.iso8601
+  end
+  
   case pubDate
     when /^\d\d\d\d-[01]\d-[0123]\d$/; pubDate
     when /^\d\d\d\d-[01]\d$/;          "#{pubDate}-01"
     when /^\d\d\d\d$/;                 "#{pubDate}-01-01"
-    when nil;                          Date.today.iso8601
+    when nil;                          fallback_date
     else;                              raise("Unrecognized date.issued format: #{pubDate.inspect}")
-  end
-end
+  end   
+end 
 
 ###################################################################################################
 def convertFileVersion(fileVersion)
@@ -363,6 +377,9 @@ end
 # existing eschol data in, it will be retained if Elements doesn't override it.
 def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
+  # FOR DEBUGGING, you can output the raw metaHash (the Elements input)
+  # puts(metaHash)
+
   # eSchol ARK identifier (provisional ID minted previously for new items)
   data = oldData ? oldData.clone : {}
   data[:id] = ark
@@ -435,7 +452,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:ucpmsPubType] = elementsPubType
 
   # History
-  data[:published] = convertPubDate(metaHash.delete('publication-date'))
+  data[:published] = convertPubDate(
+    metaHash.delete("publication-date"),
+    metaHash.delete("reporting-date-1"),
+    metaHash["deposit-date"]
+  )
   data[:submitterEmail] = submitterEmail
 
   # Custom Citation Field
