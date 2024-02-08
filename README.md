@@ -13,6 +13,10 @@ These are the steps to manuall restart:
 * "ps -ax | grep puma" to confirm kills
 * Eye start apache connectrt2
 
+## Dependabot branches (2024-02-08)
+After merging several dependabot branches, we began to run into problems with unavailable dependencies for the version of ruby we're running. (v 2.4.7) It's probably that we may increasingly see un-mergable depenedabot branches until we migrate to our new AWS hosting environment.
+
+
 ---
 
 ### Significant changes, Dec. 2023:
