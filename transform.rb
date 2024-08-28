@@ -378,7 +378,10 @@ end
 def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # FOR DEBUGGING, you can output the raw metaHash (the Elements input)
-  # puts(metaHash)
+  puts(metaHash)
+
+  # Check for non-uc depositors depositing without grants (userErrorHalt if there's a problem)
+  checkNonUCDepositorsGrants(metaHash['funder-type-display-name'], metaHash['depositor-group'], ark)
 
   # eSchol ARK identifier (provisional ID minted previously for new items)
   data = oldData ? oldData.clone : {}
@@ -462,9 +465,39 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # Custom Citation Field
   metaHash.key?("custom-citation") and data[:customCitation] = metaHash.delete("custom-citation")
 
+  # Check for non-uc depositors and non-uc items without grants.
+  # This is easier to handle after the tranforms.
+  # data = nonUCChecks(data, metaHash['depositor-group'])
+
   # All done.
   return data
 end
+
+###################################################################################################
+# If the depositor is non-uc but there's no non-uc grant, throw a user error halt
+def checkNonUCDepositorsGrants(funderTypeDisplayName, depositorGroup, ark)
+
+  # Pass through standard UC groups
+  if depositorGroup == 'rgpo-nonuc'
+    nonUCGrantFound = false
+
+    # Split the funder types; loop; set the boolean and break if found.
+    funderTypeDisplayName.split("|").each { |funder|
+      if ["RGPO (CBCRP) Award", "RGPO (CHRP) Award", "RGPO (TRDRP) Award", "RGPO (UCRI) Award"].include? funder
+        nonUCGrantFound = true
+        break
+      end
+    }
+
+    if nonUCGrantFound == false
+      userErrorHalt(ark, "Deposit not accepted: Non-UC RGPO grantees must link " +
+        "an appropriate RGPO grant (CBCRP, CHRP, TRDRP, UCRI) before depositing.")
+    end
+
+  end
+
+end
+
 
 ###################################################################################################
 def transformPeople(pieces, role)
