@@ -378,7 +378,7 @@ end
 def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # FOR DEBUGGING, you can output the raw metaHash (the Elements input)
-  puts(metaHash)
+  # puts(metaHash)
 
   # Check for non-uc depositors depositing without grants (userErrorHalt if there's a problem)
   checkNonUCDepositorsGrants(metaHash['funder-type-display-name'], metaHash['depositor-group'], ark)
@@ -467,7 +467,6 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 
   # Check for non-uc depositors and non-uc items without grants.
   # This is easier to handle after the tranforms.
-  # data = nonUCChecks(data, metaHash['depositor-group'])
 
   # All done.
   return data
@@ -479,19 +478,23 @@ def checkNonUCDepositorsGrants(funderTypeDisplayName, depositorGroup, ark)
 
   # Pass through standard UC groups
   if depositorGroup == 'rgpo-nonuc'
-    nonUCGrantFound = false
+    
+    if funderTypeDisplayName == nil
+      userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
+    else
+      nonUCGrantFound = false
 
-    # Split the funder types; loop; set the boolean and break if found.
-    funderTypeDisplayName.split("|").each { |funder|
-      if ["RGPO (CBCRP) Award", "RGPO (CHRP) Award", "RGPO (TRDRP) Award", "RGPO (UCRI) Award"].include? funder
-        nonUCGrantFound = true
-        break
+      # Split the funder types; loop; set the boolean and break if found.
+      funderTypeDisplayName.split("|").each { |funder|
+        if ["RGPO (CBCRP) Award", "RGPO (CHRP) Award", "RGPO (TRDRP) Award", "RGPO (UCRI) Award"].include? funder
+          nonUCGrantFound = true
+          break
+        end
+      }
+
+      if nonUCGrantFound == false
+        userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
       end
-    }
-
-    if nonUCGrantFound == false
-      userErrorHalt(ark, "Deposit not accepted: Non-UC RGPO grantees must link " +
-        "an appropriate RGPO grant (CBCRP, CHRP, TRDRP, UCRI) before depositing.")
     end
 
   end
