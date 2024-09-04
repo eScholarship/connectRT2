@@ -32,11 +32,7 @@ $groupToCampus = { 684 => 'lbnl',
                    1254 => 'anrcs',
                    1164 => 'ucop' }
 
-$groupToRGPO = { 784 => 'CBCRP',
-                 785 => 'CHRP',
-                 787 => 'TRDRP',
-                 783 => 'TRDRP',
-                 786 => 'UCRI' }
+$rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI"]
 
 ###################################################################################################
 $repecIDs = {}
@@ -195,6 +191,13 @@ def assignSeries(data, completionDate, metaHash)
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
 
+  # DS testing 2024-09-03
+  #puts("Data:")
+  #puts(data)
+  #puts()
+  #puts("metaHash:")
+  #puts(metaHash)
+
   (data[:units] || []).each { |unit|
     # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
@@ -224,22 +227,25 @@ def assignSeries(data, completionDate, metaHash)
     if $groupToCampus[groupID]
       (groupID == 684) ? campusSeries << "lbnl_rw" : campusSeries << "#{$groupToCampus[groupID]}_postprints"
 
-    # RGPO logic: groupID is an RGPO group, and pub is grant-funded
-    elsif ($groupToRGPO[groupID] && completionDate >= Date.new(2017,1,8) && data[:grants])
-       
-      # if the funder display names include RGPO strings (TRDRP, etc),
-      # add that series and rgpo_rw. Otherwise, it's not an RGPO grant so ignore it.
+    # RGPO logic: If the author's primary groups include "RGPO" and the pub has grants
+    elsif (groupName.include?("RGPO") && completionDate >= Date.new(2017,1,8) && data[:grants])
+
+      # if the funder display names include RGPO program string tokens (TRDRP, etc),
+      # Add the token's  series and rgpo_rw. (Otherwise, it's not an RGPO grant so ignore it.)
       funderDisplayNames.each { |displayName|
-        if displayName.include?($groupToRGPO[groupID])
-          rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
-          rgpoUnits << "rgpo_rw"
-        end
+        $rgpoPrograms.each { |program| 
+          if displayName.include?(program)
+            rgpoUnits << "#{program.downcase}_rw"
+            rgpoUnits << "rgpo_rw"
+          end
+        }
       }
 
     end
   }
 
   # If the user is non-uc and no has units, add rgpo_rw
+  # Note: non-UC depositors now require grant links, this should never occur
   if (rgpoUnits.empty?() && campusSeries.empty?() && groups.key?(779))
     rgpoUnits << "rgpo_rw"
   end
