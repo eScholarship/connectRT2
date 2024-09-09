@@ -32,7 +32,7 @@ $groupToCampus = { 684 => 'lbnl',
                    1254 => 'anrcs',
                    1164 => 'ucop' }
 
-$rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI"]
+$rgpoPrograms = ["RGPO", "CBCRP", "CHRP", "TRDRP", "UCRI"]
 
 ###################################################################################################
 $repecIDs = {}
@@ -191,15 +191,8 @@ def assignSeries(data, completionDate, metaHash)
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
 
-  # DS testing 2024-09-03
-  #puts("Data:")
-  #puts(data)
-  #puts()
-  #puts("metaHash:")
-  #puts(metaHash)
-
+  # Filter out old RGPO errors
   (data[:units] || []).each { |unit|
-    # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
       series[unit] = true
     end
@@ -219,7 +212,7 @@ def assignSeries(data, completionDate, metaHash)
   rgpoUnits = Set.new
 
   # Funder display names include texts like TRDRP, CHRP, etc.
-  funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
+  funderTypeDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
 
   groups.each { |groupID, groupName|
 
@@ -231,8 +224,8 @@ def assignSeries(data, completionDate, metaHash)
     elsif (groupName.include?("RGPO") && completionDate >= Date.new(2017,1,8) && data[:grants])
 
       # if the funder display names include RGPO program string tokens (TRDRP, etc),
-      # Add the token's  series and rgpo_rw. (Otherwise, it's not an RGPO grant so ignore it.)
-      funderDisplayNames.each { |displayName|
+      # Add the token's series and rgpo_rw. (Otherwise, it's not an RGPO grant so ignore it.)
+      funderTypeDisplayNames.each { |displayName|
         $rgpoPrograms.each { |program| 
           if displayName.include?(program)
             rgpoUnits << "#{program.downcase}_rw"
@@ -471,36 +464,32 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # Custom Citation Field
   metaHash.key?("custom-citation") and data[:customCitation] = metaHash.delete("custom-citation")
 
-  # Check for non-uc depositors and non-uc items without grants.
-  # This is easier to handle after the tranforms.
-
   # All done.
   return data
 end
 
 ###################################################################################################
-# If the depositor is non-uc but there's no non-uc grant, throw a user error halt
+# If the depositor is rgpo-nonuc but there's RGPO-related grant(s), thow error and halt
 def checkNonUCDepositorsGrants(funderTypeDisplayName, depositorGroup, ark)
 
   # Pass through standard UC groups
   if depositorGroup == 'rgpo-nonuc'
+    rgpoGrantFound = false
     
-    if funderTypeDisplayName == nil
-      userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
-    else
-      nonUCGrantFound = false
-
-      # Split the funder types; loop; set the boolean and break if found.
-      funderTypeDisplayName.split("|").each { |funder|
-        if ["RGPO (CBCRP) Award", "RGPO (CHRP) Award", "RGPO (TRDRP) Award", "RGPO (UCRI) Award"].include? funder
-          nonUCGrantFound = true
-          break
-        end
+    # Split the funder types; loop; set the boolean and break if found.
+    if funderTypeDisplayName != nil
+      funderTypeDisplayName.split("|").each { |displayName|
+        $rgpoPrograms.each { |program| 
+          if displayName.include?(program)
+            rgpoGrantFound = true
+            break
+          end
+        }
       }
+    end
 
-      if nonUCGrantFound == false
-        userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
-      end
+    if rgpoGrantFound == false
+      userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
     end
 
   end
