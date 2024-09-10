@@ -469,7 +469,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
 end
 
 ###################################################################################################
-# If the depositor is rgpo-nonuc but there's RGPO-related grant(s), thow error and halt
+# If the depositor is rgpo-nonuc but there's no RGPO-related grant(s), thow error and halt
 def checkNonUCDepositorsGrants(funderTypeDisplayName, depositorGroup, ark)
 
   # Pass through standard UC groups
