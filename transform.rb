@@ -32,11 +32,7 @@ $groupToCampus = { 684 => 'lbnl',
                    1254 => 'anrcs',
                    1164 => 'ucop' }
 
-$groupToRGPO = { 784 => 'CBCRP',
-                 785 => 'CHRP',
-                 787 => 'TRDRP',
-                 783 => 'TRDRP',
-                 786 => 'UCRI' }
+$rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI"]
 
 ###################################################################################################
 $repecIDs = {}
@@ -195,8 +191,8 @@ def assignSeries(data, completionDate, metaHash)
   # We use a Hash, which preserves order of insertion (vs. Set which seems to but isn't guaranteed)
   series = {}
 
+  # Filter out old RGPO errors
   (data[:units] || []).each { |unit|
-    # Filter out old RGPO errors
     if !(unit =~ /^(cbcrp_rw|chrp_rw|trdrp_rw|ucri_rw)$/)
       series[unit] = true
     end
@@ -216,7 +212,7 @@ def assignSeries(data, completionDate, metaHash)
   rgpoUnits = Set.new
 
   # Funder display names include texts like TRDRP, CHRP, etc.
-  funderDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
+  funderTypeDisplayNames = metaHash.delete("funder-type-display-name")&.split("|")
 
   groups.each { |groupID, groupName|
 
@@ -224,22 +220,25 @@ def assignSeries(data, completionDate, metaHash)
     if $groupToCampus[groupID]
       (groupID == 684) ? campusSeries << "lbnl_rw" : campusSeries << "#{$groupToCampus[groupID]}_postprints"
 
-    # RGPO logic: groupID is an RGPO group, and pub is grant-funded
-    elsif ($groupToRGPO[groupID] && completionDate >= Date.new(2017,1,8) && data[:grants])
-       
-      # if the funder display names include RGPO strings (TRDRP, etc),
-      # add that series and rgpo_rw. Otherwise, it's not an RGPO grant so ignore it.
-      funderDisplayNames.each { |displayName|
-        if displayName.include?($groupToRGPO[groupID])
-          rgpoUnits << "#{$groupToRGPO[groupID].downcase}_rw"
-          rgpoUnits << "rgpo_rw"
-        end
+    # RGPO logic: If the author's primary groups include "RGPO" and the pub has grants
+    elsif (groupName.include?("RGPO") && completionDate >= Date.new(2017,1,8) && data[:grants])
+
+      # if the funder display names include RGPO program string tokens (TRDRP, etc),
+      # Add the token's series and rgpo_rw. (Otherwise, it's not an RGPO grant so ignore it.)
+      funderTypeDisplayNames.each { |displayName|
+        $rgpoPrograms.each { |program| 
+          if displayName.include?(program)
+            rgpoUnits << "#{program.downcase}_rw"
+            rgpoUnits << "rgpo_rw"
+          end
+        }
       }
 
     end
   }
 
   # If the user is non-uc and no has units, add rgpo_rw
+  # Note: non-UC depositors now require grant links, this should never occur
   if (rgpoUnits.empty?() && campusSeries.empty?() && groups.key?(779))
     rgpoUnits << "rgpo_rw"
   end
@@ -380,6 +379,9 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # FOR DEBUGGING, you can output the raw metaHash (the Elements input)
   # puts(metaHash)
 
+  # Check for non-uc depositors depositing without grants (userErrorHalt if there's a problem)
+  checkNonUCDepositorsGrants(metaHash['funder-type-display-name'], metaHash['depositor-group'], ark)
+
   # eSchol ARK identifier (provisional ID minted previously for new items)
   data = oldData ? oldData.clone : {}
   data[:id] = ark
@@ -465,6 +467,35 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   # All done.
   return data
 end
+
+###################################################################################################
+# If the depositor is rgpo-nonuc but there's no RGPO-related grant(s), thow error and halt
+def checkNonUCDepositorsGrants(funderTypeDisplayName, depositorGroup, ark)
+
+  # Pass through standard UC groups
+  if depositorGroup == 'rgpo-nonuc'
+    rgpoGrantFound = false
+    
+    # Split the funder types; loop; set the boolean and break if found.
+    if funderTypeDisplayName != nil
+      funderTypeDisplayName.split("|").each { |displayName|
+        $rgpoPrograms.each { |program| 
+          if displayName.include?(program)
+            rgpoGrantFound = true
+            break
+          end
+        }
+      }
+    end
+
+    if rgpoGrantFound == false
+      userErrorHalt(ark, "Deposit not accepted: publication must be linked to a RGPO grant (CBCP, CBCRP, TRDRP, etc). Please return to the \"link grant\" screen or contact us for assistance.")
+    end
+
+  end
+
+end
+
 
 ###################################################################################################
 def transformPeople(pieces, role)
