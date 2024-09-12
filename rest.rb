@@ -26,7 +26,7 @@ MAX_USER_ERRORS = 40
 $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
 
-$recentGUIDs = {}
+$recentGuids = []
 MAX_RECENT_GUIDS = 40
 
 $nextMoreToken = {}
@@ -609,11 +609,11 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
 
   # Checks for the duplicate new-item post problem
-  if $recentGuids.include? guid and Time.now > (recentGuids[guid][:time] + 5*60)
+  if $recentGuids.include? guid
     userErrorHalt(nil, "We're experiencing a processing delay: Your deposit may take a few minutes to show up in Elements. Please refresh your publication page in a few minutes.")
   else
     $recentGuids.size >= MAX_RECENT_GUIDS and $recentGUIDs.shift
-    $recentGuids[guid][:time] = Time.now
+    $recentGuids << guid
   end
 
   # Make a provisional eschol ARK for this pub
