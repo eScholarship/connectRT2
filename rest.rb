@@ -26,6 +26,9 @@ MAX_USER_ERRORS = 40
 $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
 
+$recentGUIDs = {}
+MAX_RECENT_GUIDS = 40
+
 $nextMoreToken = {}
 MAX_NEXT_MORE_TOKEN = 20
 
@@ -604,6 +607,14 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   # Omitting the "in-progress" header would imply that we should commit this item now, but we have
   # no metadata so that would not be reasonable.
   request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
+
+  # Checks for the duplicate new-item post problem
+  if $recentGuids.include? guid and Time.now > (recentGuids[guid][:time] + 5*60)
+    userErrorHalt(nil, "We're experiencing a processing delay: Your deposit may take a few minutes to show up in Elements. Please refresh your publication page in a few minutes.")
+  else
+    $recentGuids.size >= MAX_RECENT_GUIDS and $recentGUIDs.shift
+    $recentGuids[guid][:time] = Time.now
+  end
 
   # Make a provisional eschol ARK for this pub
   ark = submitAPIMutation("mintProvisionalID(input: $input) { id }", { input: ["MintProvisionalIDInput!",
