@@ -886,9 +886,9 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
 
-  # Check for duplicate deposit error
-  $recentArkInfo.each { |ark|
-    if ark[:pubID] == pubID
+  # Check for duplicate deposit error (multiple POSTS to the same Elements pub)
+  $recentArkInfo.each { |ark, arkInfo|
+    if arkInfo[:pubID] == pubID
       userErrorHalt(nil, "We're experiencing a processing delay: "\
         "Your deposit may take a few minutes to show up in Elements. "\
         "Please refresh your publication page in a few minutes.")
