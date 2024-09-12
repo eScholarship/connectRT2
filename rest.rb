@@ -26,8 +26,8 @@ MAX_USER_ERRORS = 40
 $recentArkInfo = {}
 MAX_RECENT_ARK_INFO = 20
 
-$recentGuids = []
-MAX_RECENT_GUIDS = 40
+# $recentGuids = []
+# MAX_RECENT_GUIDS = 40
 
 $nextMoreToken = {}
 MAX_NEXT_MORE_TOKEN = 20
@@ -609,12 +609,14 @@ post "/dspace-swordv2/collection/13030/:collection" do |collection|
   request.env['HTTP_IN_PROGRESS'] == 'true' or errHalt(400, "can't finalize item without any metadata")
 
   # Checks for the duplicate new-item post problem
-  if $recentGuids.include? guid
-    userErrorHalt(nil, "We're experiencing a processing delay: Your deposit may take a few minutes to show up in Elements. Please refresh your publication page in a few minutes.")
-  else
-    $recentGuids.size >= MAX_RECENT_GUIDS and $recentGUIDs.shift
-    $recentGuids << guid
-  end
+  # if $recentGuids.include? guid
+  #         userErrorHalt(nil, "We're experiencing a processing delay: "\
+  #       "Your deposit may take a few minutes to show up in Elements. "\
+  #       "Please refresh your publication page in a few minutes.")
+  # else
+  #   $recentGuids.size >= MAX_RECENT_GUIDS and $recentGUIDs.shift
+  #   $recentGuids << guid
+  # end
 
   # Make a provisional eschol ARK for this pub
   ark = submitAPIMutation("mintProvisionalID(input: $input) { id }", { input: ["MintProvisionalIDInput!",
@@ -883,6 +885,15 @@ put "/dspace-rest/items/:itemGUID/metadata" do |itemID|
   who = metaHash['depositor-email']
   who =~ URI::MailTo::EMAIL_REGEXP or raise("Can't find valid depositor-email in feed")
   puts "Found pubID=#{pubID.inspect}, who=#{who.inspect}."
+
+  # Check for duplicate deposit error
+  $recentArkInfo.each { |ark|
+    if ark[:pubID] == pubID
+      userErrorHalt(nil, "We're experiencing a processing delay: "\
+        "Your deposit may take a few minutes to show up in Elements. "\
+        "Please refresh your publication page in a few minutes.")
+    end
+  }
 
   $recentArkInfo.size >= MAX_RECENT_ARK_INFO and $recentArkInfo.shift
   $recentArkInfo[itemID] = { pubID: pubID, who: who }
