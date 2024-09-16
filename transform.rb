@@ -304,7 +304,10 @@ end
 
 def convertOALocation(ark, metaHash, data)
   loc = metaHash.delete("oa-location-url")
-  if loc =~ %r{search.library.(berkeley|ucla|ucr|ucdavis|ucsb|ucsf).edu} or loc =~ %r{primo.exlibrisgroup.com} or loc =~ %r{search-library.ucsd.edu}
+  if ( loc =~ %r{search.library.(berkeley|ucla|ucr|ucdavis|ucsb|ucsf).edu} or
+    loc =~ %r{primo.exlibrisgroup.com} or 
+    loc =~ %r{search-library.ucsd.edu} or
+    loc =~ %r{rdcu.be} )
 
     userErrorHalt(ark, "The link you provided may not be accessible to readers outside of UC. \n" +
     "Please provide a link to an open access version of this article.")
