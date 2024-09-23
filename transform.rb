@@ -256,6 +256,26 @@ def assignSeries(data, completionDate, metaHash)
     series.key?(s) or series[s] = true
   }
 
+
+
+  # TK DEVIN WORKING
+  puts "TK TK DEVIN WORKING HERE"
+  elementsUnitIds = (groups.keys).join(", ")
+  unitsQuery = %{ unitsElementsList(elementsIdList: [{#elementsUnitIds}]) \{ id name elementsId\} }
+  puts itemQuery
+  data = accessAPIQuery(unitsQuery) #.dig("unitsElementsList", "id") # or halt(404) --> This CAN return nill
+  puts data
+  depts = JSON.parse(data)
+  puts depts
+  puts "----------------"
+
+  # depts_array = nil
+  # depts.each {|dept| dept. }
+  # depts = 
+
+
+
+
   # Figures out which departments correspond to which Elements groups.
   # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
   # Note: departments always come after campus
@@ -266,6 +286,7 @@ def assignSeries(data, completionDate, metaHash)
 
   # Add any matching departments for this publication
   deptSeries = groups.map { |groupID, groupName| depts[groupID] }.compact
+  puts data
 
   # Add department series in sorted order (and avoid dupes)
   deptSeries.sort.each { |s| series.key?(s) or series[s] = true }
