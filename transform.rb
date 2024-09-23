@@ -256,40 +256,12 @@ def assignSeries(data, completionDate, metaHash)
     series.key?(s) or series[s] = true
   }
 
-
-
-  # TK DEVIN WORKING
-  puts "TK TK DEVIN WORKING HERE"
+  # Send the Elements IDs to GraphQL, get corresponding eSchol unit IDs
   elementsUnitIds = (groups.keys).join(", ")
-  unitsQuery = %{ unitsElementsList(elementsIdList: [{#elementsUnitIds}]) \{ id name elementsId\} }
-  puts itemQuery
-  data = accessAPIQuery(unitsQuery) #.dig("unitsElementsList", "id") # or halt(404) --> This CAN return nill
-  puts data
-  depts = JSON.parse(data)
-  puts depts
-  puts "----------------"
-
-  # depts_array = nil
-  # depts.each {|dept| dept. }
-  # depts = 
-
-
-
-
-  # Figures out which departments correspond to which Elements groups.
-  # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
-  # Note: departments always come after campus
-  depts = Hash[DB.fetch("""SELECT id unit_id, attrs->>'$.elements_id' elements_id FROM units
-                           WHERE attrs->>'$.elements_id' is not null""").map { |row|
-    [row[:elements_id].to_i, row[:unit_id]]
-  }]
-
-  # Add any matching departments for this publication
-  deptSeries = groups.map { |groupID, groupName| depts[groupID] }.compact
-  puts data
-
-  # Add department series in sorted order (and avoid dupes)
-  deptSeries.sort.each { |s| series.key?(s) or series[s] = true }
+  unitsQuery = "unitsUCPMSList(ucpmsIdList: [#{elementsUnitIds}]) \{ id \}"
+  depts = accessAPIQuery(unitsQuery).dig("unitsUCPMSList").map { |item| item["id"] }
+  # Sort alphabetically and add, avoiding duplicates
+  depts.sort.each { |id| series.key?(id) or series[id] = true }
 
   # Re-sort the series keys before passing
   seriesKeys = series.keys
