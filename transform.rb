@@ -7,16 +7,6 @@ require 'sequel'
 require_relative './sanitize.rb'
 
 ###################################################################################################
-# Connect to the eschol5 database server
-DB = Sequel.connect({
-  "adapter"  => "mysql2",
-  "host"     => ENV["ESCHOL_DB_HOST"] || raise("missing env ESCHOL_DB_HOST"),
-  "port"     => ENV["ESCHOL_DB_PORT"] || raise("missing env ESCHOL_DB_PORT").to_i,
-  "database" => ENV["ESCHOL_DB_DATABASE"] || raise("missing env ESCHOL_DB_DATABASE").to_i,
-  "username" => ENV["ESCHOL_DB_USERNAME"] || raise("missing env ESCHOL_DB_USERNAME"),
-  "password" => ENV["ESCHOL_DB_PASSWORD"] || raise("missing env ESCHOL_DB_HOST") })
-
-###################################################################################################
 # Elements group IDs, used to determine into which campus postprint bucket to deposit.
 $groupToCampus = { 684 => 'lbnl',
                    430 => 'ucb',
