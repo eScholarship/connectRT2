@@ -7,16 +7,6 @@ require 'sequel'
 require_relative './sanitize.rb'
 
 ###################################################################################################
-# Connect to the eschol5 database server
-DB = Sequel.connect({
-  "adapter"  => "mysql2",
-  "host"     => ENV["ESCHOL_DB_HOST"] || raise("missing env ESCHOL_DB_HOST"),
-  "port"     => ENV["ESCHOL_DB_PORT"] || raise("missing env ESCHOL_DB_PORT").to_i,
-  "database" => ENV["ESCHOL_DB_DATABASE"] || raise("missing env ESCHOL_DB_DATABASE").to_i,
-  "username" => ENV["ESCHOL_DB_USERNAME"] || raise("missing env ESCHOL_DB_USERNAME"),
-  "password" => ENV["ESCHOL_DB_PASSWORD"] || raise("missing env ESCHOL_DB_HOST") })
-
-###################################################################################################
 # Elements group IDs, used to determine into which campus postprint bucket to deposit.
 $groupToCampus = { 684 => 'lbnl',
                    430 => 'ucb',
@@ -256,19 +246,12 @@ def assignSeries(data, completionDate, metaHash)
     series.key?(s) or series[s] = true
   }
 
-  # Figures out which departments correspond to which Elements groups.
-  # Note: this query is so fast (< 0.01 sec) that it's not worth caching.
-  # Note: departments always come after campus
-  depts = Hash[DB.fetch("""SELECT id unit_id, attrs->>'$.elements_id' elements_id FROM units
-                           WHERE attrs->>'$.elements_id' is not null""").map { |row|
-    [row[:elements_id].to_i, row[:unit_id]]
-  }]
-
-  # Add any matching departments for this publication
-  deptSeries = groups.map { |groupID, groupName| depts[groupID] }.compact
-
-  # Add department series in sorted order (and avoid dupes)
-  deptSeries.sort.each { |s| series.key?(s) or series[s] = true }
+  # Send the Elements IDs to GraphQL, get corresponding eSchol unit IDs
+  elementsUnitIds = (groups.keys).join(", ")
+  unitsQuery = "unitsUCPMSList(ucpmsIdList: [#{elementsUnitIds}]) \{ id \}"
+  depts = accessAPIQuery(unitsQuery).dig("unitsUCPMSList").map { |item| item["id"] }
+  # Sort alphabetically and add, avoiding duplicates
+  depts.sort.each { |id| series.key?(id) or series[id] = true }
 
   # Re-sort the series keys before passing
   seriesKeys = series.keys
