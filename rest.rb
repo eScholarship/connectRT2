@@ -290,7 +290,7 @@ def approveItem(ark, info, replaceOnly: nil)
       puts "Depositing item #{ark}."
       outID = submitAPIMutation("depositItem(input: $input) { id }",
                                 { input: ["DepositItemInput!", info[:meta]] }).dig("depositItem", "id")
-      outID.include?(ark) or userErrorHalt(shortArk,
+      outID.include?(ark) or userErrorHalt(ark.sub('ark:/13030/',''),
         "We received an unusual response from eScholarship. Your deposit may have worked correctly, "\
         "but may not show up in the Elements interface for 10 minutes or so.")
     end
