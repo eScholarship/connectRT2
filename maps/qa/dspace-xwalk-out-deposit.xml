@@ -113,7 +113,9 @@
         <xwalk:field-source from="object.type" />
       </xwalk:field-mapping>
       <xwalk:field-mapping to="title">
-        <xwalk:field-source from="title" value-map="remove-jats-markup" />
+        <xwalk:field-source value-map="jats-block-to-inline">
+          <xwalk:field-source from="title" value-map="remove-jats-markup" />
+        </xwalk:field-source>
       </xwalk:field-mapping>
       <xwalk:field-mapping to="parent-title">
         <xwalk:field-source from="parent-title" />
@@ -211,6 +213,9 @@
       <xwalk:value-mapping from="\\n" to="&#xA;" />
     </xwalk:value-map>
     <!-- END JATS markup -->
+    <xwalk:value-map name="jats-block-to-inline" matchMode="regex">
+      <xwalk:value-mapping from="\$\$(.*?)\$\$" to="\($1\)" />
+    </xwalk:value-map>
   </xwalk:value-maps>
   <!-- Fields where Elements has authority to perform metadata updates. We want all fields,
        so this list is generated automatically using the following command line:
