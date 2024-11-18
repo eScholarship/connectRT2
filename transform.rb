@@ -429,6 +429,9 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?("report-number") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'report', id: metaHash.delete('report-number')
   }
+  metaHash.key?("pmid") and data[:localIDs] << {
+    scheme: 'OTHER_ID', subScheme: 'pmid', id: metaHash.delete('pmid')
+  }
   metaHash.key?("issn") and data[:issn] = metaHash.delete("issn")
   metaHash.key?("isbn-13") and data[:isbn] = metaHash.delete("isbn-13") # for books and chapters
   metaHash.key?("journal") and data[:journal] = metaHash.delete("journal")

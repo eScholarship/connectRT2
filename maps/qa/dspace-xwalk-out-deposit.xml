@@ -172,6 +172,16 @@
       <xwalk:field-mapping to="report-number">
         <xwalk:field-source from="number" />
       </xwalk:field-mapping>
+      <xwalk:field-mapping to="pmid" >
+        <xwalk:field-source from="external-identifiers">
+          <xwalk:if>
+            <xwalk:condition operator="equals" argument-field="identifier:scheme">pubmed</xwalk:condition>
+            <xwalk:result>
+              <xwalk:field-source data-part="identifier:value" />
+            </xwalk:result>
+          </xwalk:if>
+        </xwalk:field-source>
+      </xwalk:field-mapping>          
       <xwalk:field-mapping to="keywords">
         <xwalk:field-source from="object.labels" format="keyword:with-scheme" />
       </xwalk:field-mapping>
@@ -261,6 +271,7 @@
       <xwalk:field-authority field-name="eissn" />
       <xwalk:field-authority field-name="doi" />
       <xwalk:field-authority field-name="report-number" />
+      <xwalk:field-authority field-name="pmid" />
       <xwalk:field-authority field-name="keywords" />
       <xwalk:field-authority field-name="custom-citation" />
       <xwalk:field-authority field-name="is-reviewed" />
