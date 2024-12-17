@@ -723,6 +723,15 @@ def mimicDspaceXMLOutput(input_xml)
             node.replace(convert_local_id("elements-pub-id", node, noko_xml))
           when "DOI"
             node.replace(convert_local_id("doi", node, noko_xml))
+          when "OTHER_ID"
+            case node.css("subScheme").text
+            when "pmid"
+              node.replace(convert_local_id("pmid", node, noko_xml))
+            when "report"
+              node.replace(convert_local_id("report-number", node, noko_xml))
+            else
+              node.unlink()
+            end
           else
             node.unlink()
         end
