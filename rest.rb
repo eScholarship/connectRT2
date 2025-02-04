@@ -245,7 +245,7 @@ def checkOverwriteOK(shortArk)
   data['source'] =~ /^(subi|repo)$/ or userErrorHalt(shortArk, "Cannot modify items imported from external systems.")
 
   # Campus postprints are ok
-  if data['units'].all? { |unitID| unitID =~ /^uc\w\w?$/ }
+  if data['units'].all? { |unitHash| unitHash["id"] =~ /^uc\w\w?$/ }
     return
   else
     userErrorHalt(shortArk, """
