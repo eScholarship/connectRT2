@@ -780,7 +780,9 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     oldData[:units] = (data["units"] || []).map { |unit| unit['id'] }
     metaHash['deposit-date'] = pubDate
     jsonMeta = elementsToJSON(oldData, pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
-    jsonMeta[:embargoExpires] = data['embargoExpires']
+    if data['embargoExpires']
+       jsonMeta[:embargoExpires] = data['embargoExpires']
+    end
     jsonMeta[:rights] = data['rights']
     #puts "jsonMeta:"; pp jsonMeta
 
