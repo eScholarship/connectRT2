@@ -752,21 +752,20 @@ def removeNils(struc)
 end
 
 ###################################################################################################
+# Removes any author operations with /author/# > 20
 def filterHyperauthorUpdates(diff)
-  # Removes any author operations with /author/# > 20
-  begin
-    filtered_diff = []
+  filtered_diff = []
 
-    diff.each { |update|
-      path = update["path"]
-      if (path.include? "author")
-        next if path.split('/')[2].to_i > 20
-      end
-      filtered_diff << update
-    }
+  diff.each { |update|
+    path = update["path"]
+    if (path.include? "author")
+      next if path.split('/')[2].to_i > 20
+    end
+    filtered_diff << update
+  }
 
-    return filtered_diff
-  end
+  return filtered_diff
+end
 
 ###################################################################################################
 def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
@@ -816,8 +815,10 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     diff = JsonDiff.diff(d1, d2, include_was: true)
     puts "Anticipated diff:"; pp diff
 
-    diff = filterHyperauthorUpdates(diff)
-    puts "Filtered for hyperauthor updates:"; pp diff
+    if (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
+      diff = filterHyperauthorUpdates(diff)
+      puts "Filtered for hyperauthor updates:"; pp diff
+    end
 
     if diff.empty?
       puts "No anticipated diff; skipping update."
