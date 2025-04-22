@@ -816,7 +816,7 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     puts "Anticipated diff:"; pp diff
 
     if (diff.length() > 100) && (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
-      puts "Hyperauthor filter triggered."
+      puts "Hyperauthor filter triggered #{itemID}"
       diff = filterHyperauthorUpdates(diff)
       puts "Filtered for hyperauthor updates:"; pp diff
     end
