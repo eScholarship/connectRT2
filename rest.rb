@@ -815,7 +815,8 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     diff = JsonDiff.diff(d1, d2, include_was: true)
     puts "Anticipated diff:"; pp diff
 
-    if (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
+    if (diff.length() > 20) and (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
+      puts "Hyperauthor update detected."
       diff = filterHyperauthorUpdates(diff)
       puts "Filtered for hyperauthor updates:"; pp diff
     end
