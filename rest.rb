@@ -40,7 +40,7 @@ $feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
 ITEM_META_FIELDS = %{
   id
   title
-  authors(first:500) {
+  authors() {
     nodes {
       email
       orcid
@@ -54,7 +54,7 @@ ITEM_META_FIELDS = %{
       }
     }
   }
-  contributors(first:500) {
+  contributors() {
     nodes {
       role
       email
@@ -815,11 +815,11 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     diff = JsonDiff.diff(d1, d2, include_was: true)
     puts "Anticipated diff:"; pp diff
 
-    if (diff.length() > 20) and (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
-      puts "Hyperauthor update detected."
-      diff = filterHyperauthorUpdates(diff)
-      puts "Filtered for hyperauthor updates:"; pp diff
-    end
+    # if (diff.length() > 20) and (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
+    #   puts "Hyperauthor update detected."
+    #   diff = filterHyperauthorUpdates(diff)
+    #   puts "Filtered for hyperauthor updates:"; pp diff
+    # end
 
     if diff.empty?
       puts "No anticipated diff; skipping update."
