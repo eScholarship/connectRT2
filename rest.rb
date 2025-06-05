@@ -759,12 +759,84 @@ def filterHyperauthorUpdates(diff)
   diff.each { |update|
     path = update["path"]
     if (path.include? "author")
+      # Check for emails and orcids --> allow all these updates
       next if (path.split('/')[2].to_i > 20)
     end
     filtered_diff << update
   }
 
   return filtered_diff
+end
+
+###################################################################################################
+# Checks the metadata update diff, returns T/F if updateis needed.
+def checkDiff(old_data, new_data)
+
+    # Convert hash keys from symbols to strings
+    def symbol_keys_to_string_keys(obj)
+      return obj.inject({}){|memo,(k,v)| memo[k.to_s] = symbol_keys_to_string_keys(v); memo} if obj.is_a? Hash
+      return obj.inject([]){|memo,v | memo << symbol_keys_to_string_keys(v); memo} if obj.is_a? Array
+      return obj
+    end
+
+    puts "\n\nDIFF START: #{Time.now.strftime('%H:%M:%S.%L')}"
+
+    # Remove keys with nil values
+    old_data = removeNils(old_data)
+    new_data = removeNils(new_data)
+
+    # Align the new data with old data for comparison
+    new_data = symbol_keys_to_string_keys(new_data)
+    if (new_data.has_key?("grants"))
+      # new_data["grants"] = new_grants_to_old_grants(new_data["grants"])
+      new_data["grants"] = new_data["grants"].collect { |grant| grant["name"] }
+    end
+
+    # Remove unneeded keys for comparison
+    unneeded_comp_keys = %w{
+      added
+      pagination
+      permalink
+      source
+      status
+      updated
+      keywords
+      pubRelation
+      sourceFeedLink
+      sourceID
+      sourceName
+      submitterEmail
+      fpage
+      lpage
+    }
+
+    unneeded_comp_keys.each { |key| 
+      new_data.delete(key) 
+      old_data.delete(key)
+    }
+
+    if old_data == new_data
+      puts "DIFF: Matching hashes."
+      puts "No anticipated diff. Skipping update."
+      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+      return false
+
+    else
+      puts "DIFF: Non-matching hashes. Updated needed."
+
+      old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
+      new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
+
+      puts "\nOLD METADTA:"
+      puts old_diff
+
+      puts "\nNEW METADTA:"
+      puts new_diff
+
+      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+      return true
+    end
+
 end
 
 ###################################################################################################
@@ -792,40 +864,18 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
 
     puts "Found: pubID=#{pubID.inspect}"
 
+    # Get the new data for comparison (jsonMeta = new data).
     oldData = {}
     oldData[:units] = (data["units"] || []).map { |unit| unit['id'] }
     metaHash['deposit-date'] = pubDate
     jsonMeta = elementsToJSON(oldData, pubID, who, metaHash, "ark:/13030/#{itemID}", feedFile)
     jsonMeta[:embargoExpires] = data['embargoExpires']
     jsonMeta[:rights] = data['rights']
-    #puts "jsonMeta:"; pp jsonMeta
 
-    # We don't generate certain fields on our side; also filter out keywords since they're basically unused.
-    d1 = removeNils(JSON.parse(data.to_json))
-    %w{added pagination permalink source status updated keywords}.each { |key| d1.delete(key) }
+    # Double-check that the update will actually result in changed eSchol data.
+    updateNeeded = checkDiff(data.clone, jsonMeta.clone)
 
-    # Certain fields aren't available via an API query; also filter out keywords since they're basically unused.
-    d2 = removeNils(JSON.parse(jsonMeta.to_json))
-    %w{pubRelation sourceFeedLink sourceID sourceName submitterEmail keywords}.each { |key| d2.delete(key) }
-
-    # FOR DEBUGGING, you can output the JSONs which are compared and saved to "diff"
-    # puts "\nd1="; pp d1
-    # puts "\nd2="; pp d2
-
-    diff = JsonDiff.diff(d1, d2, include_was: true)
-    puts "Anticipated diff:"; pp diff
-
-    if (diff.length() > 100) && (Date.today - Date.strptime(d1['published'], "%Y-%m-%d") > 90)
-      puts "Hyperauthor filter triggered #{itemID}"
-      diff = filterHyperauthorUpdates(diff)
-      puts "Filtered for hyperauthor updates:"; pp diff
-    end
-
-    if diff.empty?
-      puts "No anticipated diff; skipping update."
-      return nil
-    elsif diff == []
-      puts "Empty diff array; No anticipated diff; skipping update."
+    if (updateNeeded == false)
       return nil
     end
 
