@@ -57,13 +57,13 @@ end
 ###################################################################################################
 def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
    
-  # If elementsIsReveiewed nil is considered false
+  # elementsIsReveiewed = nil results in "false"
   peerReviewBool = (elementsIsReviewed == "true")? true : false
 
   # If it's an article without a specified "is reviewed"
   if (elementsPubType == "journal-article" && elementsIsReviewed == nil)
 
-    # Accepted & published works are "true", all others false
+    # Accepted & published works are T, all others F
     if (elementsPubStatus == "Accepted" ||
       elementsPubStatus == "Published" ||
       elementsPubStatus == "Published online")
@@ -72,8 +72,8 @@ def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
       return(false)
     end
 
-  # All other pub types (incl. articles w/ specified "is reviewed") 
-  # Use the specified value, null = false.
+  # All other pub types, use the specified value (null = false).
+  # This includes journal articles with specified T/F elementsIsReviewed
   # The user can edit this with a manual record if they want to.
   else
     return(peerReviewBool)
@@ -382,17 +382,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   elementsPubStatus = metaHash['publication-status'] || nil
   elementsIsReviewed = metaHash.delete('is-reviewed') || nil
   
+  # Infer peer review status if it's not explicitly set
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
+  # Convert Elements pub types and statuses to eSchol enum values
   data[:type] = convertPubType(elementsPubType)
-  data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
-  if (elementsPubType == 'preprint' ||
-     (elementsPubType == 'journal-article' &&
-       (elementsPubStatus == 'In preparation' ||
-        elementsPubStatus == 'Submitted' ||
-        elementsPubStatus == 'Unpublished') ) )  
-    data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
-  end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   
   embargo = assignEmbargo(metaHash)
