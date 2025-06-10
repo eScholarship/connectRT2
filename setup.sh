@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 
-#bundle config build.nokogiri --use-system-libraries
-bundle install --path=gems --binstubs
+rm -rf bin gems Gemfile.lock
+mkdir bin
+bundle config path gems --local
+bundle install
+bundle binstubs --all

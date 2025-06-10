@@ -394,7 +394,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
     data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
   end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
-  data[:embargoExpires] = assignEmbargo(metaHash)
+  
+  embargo = assignEmbargo(metaHash)
+  if embargo
+     data[:embargoExpires] = embargo
+  end
 
   # Author and editor metadata.
   metaHash['authors'] && data[:authors] = transformPeople(metaHash.delete('authors'), nil)

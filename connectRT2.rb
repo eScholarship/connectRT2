@@ -33,6 +33,7 @@ STDOUT.sync = true
  # Compress things that can benefit
 configure do
   set show_exceptions: false
+  set environment: :production
 
   use Rack::Deflater,
     :include => %w{application/javascript text/html text/xml text/css application/json image/svg+xml},
