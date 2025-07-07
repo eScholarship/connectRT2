@@ -40,7 +40,7 @@ $feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
 ITEM_META_FIELDS = %{
   id
   title
-  authors(first: 500) {
+  authors(first: 10000) {
     nodes {
       email
       orcid
@@ -54,7 +54,7 @@ ITEM_META_FIELDS = %{
       }
     }
   }
-  contributors(first: 500) {
+  contributors(first: 10000) {
     nodes {
       role
       email
@@ -752,90 +752,71 @@ def removeNils(struc)
 end
 
 ###################################################################################################
-# Removes any author operations with /author/# > 20
-def filterHyperauthorUpdates(diff)
-  filtered_diff = []
-
-  diff.each { |update|
-    path = update["path"]
-    if (path.include? "author")
-      # Check for emails and orcids --> allow all these updates
-      next if (path.split('/')[2].to_i > 20)
-    end
-    filtered_diff << update
-  }
-
-  return filtered_diff
-end
-
-###################################################################################################
 # Checks the metadata update diff, returns T/F if updateis needed.
 def checkDiff(old_data, new_data)
+  puts "\nDIFF START: #{Time.now.strftime('%H:%M:%S.%L')}"
 
-    # Convert hash keys from symbols to strings
-    def symbol_keys_to_string_keys(obj)
-      return obj.inject({}){|memo,(k,v)| memo[k.to_s] = symbol_keys_to_string_keys(v); memo} if obj.is_a? Hash
-      return obj.inject([]){|memo,v | memo << symbol_keys_to_string_keys(v); memo} if obj.is_a? Array
-      return obj
-    end
+  # Convert hash keys from symbols to strings
+  def symbol_keys_to_string_keys(obj)
+    return obj.inject({}){|memo,(k,v)| memo[k.to_s] = symbol_keys_to_string_keys(v); memo} if obj.is_a? Hash
+    return obj.inject([]){|memo,v | memo << symbol_keys_to_string_keys(v); memo} if obj.is_a? Array
+    return obj
+  end
 
-    puts "\n\nDIFF START: #{Time.now.strftime('%H:%M:%S.%L')}"
+  # Remove keys with nil values
+  old_data = removeNils(old_data)
+  new_data = removeNils(new_data)
 
-    # Remove keys with nil values
-    old_data = removeNils(old_data)
-    new_data = removeNils(new_data)
+  # Align the new data with old data for comparison
+  new_data = symbol_keys_to_string_keys(new_data)
+  if (new_data.has_key?("grants"))
+    new_data["grants"] = new_data["grants"].collect { |grant| grant["name"] }
+  end
 
-    # Align the new data with old data for comparison
-    new_data = symbol_keys_to_string_keys(new_data)
-    if (new_data.has_key?("grants"))
-      # new_data["grants"] = new_grants_to_old_grants(new_data["grants"])
-      new_data["grants"] = new_data["grants"].collect { |grant| grant["name"] }
-    end
+  # Remove unneeded keys for comparison
+  unneeded_comp_keys = %w{
+    added
+    pagination
+    permalink
+    source
+    status
+    updated
+    keywords
+    pubRelation
+    sourceFeedLink
+    sourceID
+    sourceName
+    submitterEmail
+    fpage
+    lpage
+  }
 
-    # Remove unneeded keys for comparison
-    unneeded_comp_keys = %w{
-      added
-      pagination
-      permalink
-      source
-      status
-      updated
-      keywords
-      pubRelation
-      sourceFeedLink
-      sourceID
-      sourceName
-      submitterEmail
-      fpage
-      lpage
-    }
+  unneeded_comp_keys.each { |key| 
+    new_data.delete(key) 
+    old_data.delete(key)
+  }
 
-    unneeded_comp_keys.each { |key| 
-      new_data.delete(key) 
-      old_data.delete(key)
-    }
+  if old_data == new_data
+    puts "DIFF: Matching hashes."
+    puts "No anticipated diff. Skipping update."
+    puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+    return false
 
-    if old_data == new_data
-      puts "DIFF: Matching hashes."
-      puts "No anticipated diff. Skipping update."
-      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
-      return false
+  else
+    puts "DIFF: Non-matching hashes. Updated needed."
 
-    else
-      puts "DIFF: Non-matching hashes. Updated needed."
+    old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
+    new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
 
-      old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
-      new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
+    puts "\nOLD METADTA:"
+    puts old_diff
 
-      puts "\nOLD METADTA:"
-      puts old_diff
+    puts "\nNEW METADTA:"
+    puts new_diff
 
-      puts "\nNEW METADTA:"
-      puts new_diff
-
-      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
-      return true
-    end
+    puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+    return true
+  end
 
 end
 
