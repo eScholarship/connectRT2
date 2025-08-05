@@ -763,6 +763,9 @@ def checkDiff(old_data, new_data)
     return obj
   end
 
+  puts "NEW AUTHOR COUNT: #{new_data[:authors].length}"
+  puts "HYPERAUTHOR PAPER" if (new_data[:authors].length > 1000)
+
   # Remove keys with nil values
   old_data = removeNils(old_data)
   new_data = removeNils(new_data)
@@ -789,6 +792,9 @@ def checkDiff(old_data, new_data)
     submitterEmail
     fpage
     lpage
+    volume
+    issue
+    issn
   }
 
   unneeded_comp_keys.each { |key| 
