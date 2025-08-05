@@ -792,6 +792,7 @@ def checkDiff(old_data, new_data)
     submitterEmail
     fpage
     lpage
+    journal
     volume
     issue
     issn
