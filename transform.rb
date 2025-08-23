@@ -382,17 +382,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   elementsPubStatus = metaHash['publication-status'] || nil
   elementsIsReviewed = metaHash.delete('is-reviewed') || nil
   
+  # Infer peer review status if it's not explicitly set
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
+  # Convert Elements pub types and statuses to eSchol enum values
   data[:type] = convertPubType(elementsPubType)
-  data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
-  if (elementsPubType == 'preprint' ||
-     (elementsPubType == 'journal-article' &&
-       (elementsPubStatus == 'In preparation' ||
-        elementsPubStatus == 'Submitted' ||
-        elementsPubStatus == 'Unpublished') ) )  
-    data[:isPeerReviewed] = false  # assume preprints are not peer reviewed
-  end  
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   
   embargo = assignEmbargo(metaHash)
