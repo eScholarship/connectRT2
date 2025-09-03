@@ -40,7 +40,7 @@ $feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
 ITEM_META_FIELDS = %{
   id
   title
-  authors(first: 500) {
+  authors(first: 10000) {
     nodes {
       email
       orcid
@@ -54,7 +54,7 @@ ITEM_META_FIELDS = %{
       }
     }
   }
-  contributors(first: 500) {
+  contributors(first: 10000) {
     nodes {
       role
       email
