@@ -88,6 +88,8 @@ def convertKeywords(kws)
     # Remove scheme at end, and remove initial series of digits
     kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
   }.uniq
+  # eSchol has a 1k limit on keywords
+  kws = kws.take(999)
 end
 
 ###################################################################################################
