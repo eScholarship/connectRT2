@@ -24,6 +24,8 @@ $groupToCampus = { 684 => 'lbnl',
 
 $rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI"]
 
+$dataLabelUnits = {"c-eschol-news" => "news"}
+
 ###################################################################################################
 $repecIDs = {}
 MAX_REPEC_IDS = 10
@@ -93,6 +95,18 @@ def convertKeywords(kws)
 end
 
 ###################################################################################################
+def convertDataLabelUnits(dls)
+  # converts (e.g.) "uci (c-eschol-news)" to "news_uci"
+  dls.map! { |dl|
+    match_strings = s.match(/(.*) \(([^)]+)\)$/)
+    dl_campus = match_strings[1]
+    dl_unit = $dataLabelUnits[match_strings[2]]
+    dl = "#{dl_unit}_#{dl_campus}"
+  }.uniq
+  return dls
+end
+
+###################################################################################################
 def parseMetadataEntries(feed)
   metaHash = {}
 
@@ -101,10 +115,23 @@ def parseMetadataEntries(feed)
     value = ent.text_at('value')
 
     # Multiple keywords are expected.
-    # This array is handled later, via the convertKeywords() function.
+    # These can be standard keywords or data labels for units
     if key == 'keywords'
-      metaHash[key] ||= []
-      metaHash[key] << value
+      # Check keyword for unit labels
+      unitAdded = false
+      dataLabelUnits.keys.each { |unitLabel|
+        if value =~ unitLabel
+          unitAdded = true
+          metaHash['dataLabelUnits'] ||= []
+          metaHash['dataLabelUnits'] << value
+          break
+        end
+      }
+      # If it's not a unit, add it to standard keywords
+      if not unitAdded
+        metaHash[key] ||= []
+        metaHash[key] << value
+      end
 
     # These keys may also be multiple; However, they aren't used in the PUT req.
     elsif key == 'subjects' || key == 'disciplines'
@@ -260,6 +287,9 @@ def assignSeries(data, completionDate, metaHash)
   seriesKeys = seriesKeys.sort { |a, b| 
     a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }
+
+  # If present, convert data labels to units
+  seriesKeys.concat(data[:dataLabelUnits]) if data?(:dataLabelUnits)
 
   return data[:units] = seriesKeys
 end
@@ -420,6 +450,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?('fpage') and data[:fpage] = metaHash.delete('fpage')
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))
+  metaHash.key?('dataLabelUnits') and data[:dataLabelUnits] = convertDataLabelUnits(metaHash.delete('dataLabelUnits'))
   if metaHash.key?('requested-reuse-licence.short-name')
     if metaHash['requested-reuse-licence.short-name'] != "No Licence"
       ccCode = metaHash.delete('requested-reuse-licence.short-name')
