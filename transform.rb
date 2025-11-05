@@ -439,8 +439,8 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
   # If the pub has keywords, separate labels specifically used for unit asignment
-  if metaHash[:keywords]
-    metaHash[:keywords], dataLabelUnits = separateDataLabelUnitsFromKeywords(metaHash[:keywords])
+  if metaHash['keywords']
+    metaHash['keywords'], dataLabelUnits = separateDataLabelUnitsFromKeywords(metaHash['keywords'])
   end
 
   data[:type] = convertPubType(elementsPubType)
