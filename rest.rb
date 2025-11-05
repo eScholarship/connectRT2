@@ -816,8 +816,7 @@ def checkDiff(old_data, new_data)
     }
 
     if old_data == new_data
-      puts "DIFF: Matching hashes."
-      puts "No anticipated diff. Skipping update."
+      puts "DIFF: Matching hashes. Skipping update."
       puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
       return false
 
@@ -827,11 +826,16 @@ def checkDiff(old_data, new_data)
       old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
       new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
 
-      puts "\nOLD METADTA:"
-      puts old_diff
+      # For troubleshooting diffs:
+      # puts "\nOLD METADTA:"
+      # puts old_diff
+      # puts "\nNEW METADTA:"
+      # puts new_diff
 
-      puts "\nNEW METADTA:"
-      puts new_diff
+      puts "Updating keys: #{new_diff.keys}"
+      if new_diff.has_key?(:authors)
+        puts "Hyperauthor update: #{new_diff[:authors].length} length" if new_diff[:authors].length > 500
+      end
 
       puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
       return true
@@ -886,7 +890,7 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     # FOR DEBUGGING, you can re-query the data to see what diffs there might be
     # DS removed this on 2023-12-13 to speed up the processing queue: It sends
     # an additional GET to eScholarship, practically doubling per-item processing time
-
+    
     # newData = accessAPIQuery(itemQuery, { itemID: ["ID!", "ark:/13030/#{itemID}"] }, true).dig("item") or raise
     # diff = JsonDiff.diff(data, newData, include_was: true)
     # diff.reject! { |d| d['path'] == '/updated' }  # not interesting that 'updated' is changing

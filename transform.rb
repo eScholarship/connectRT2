@@ -84,6 +84,40 @@ def getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 end
 
 ###################################################################################################
+# Separates data labels used for unit assignment from the keywords array
+# Transforms data labels to required format for eschol units
+def separateDataLabelUnitsFromKeywords(kws)
+  dataLabelKeywords, standardKeywords = [], []
+  kws.each { |kw| 
+    found = false
+    $dataLabelUnits.keys.each { |dl|
+      if kw.include?(dl)
+        dataLabelKeywords << kw
+        found = true
+        break
+      end
+    }
+    standardKeywords << kw if found == false
+  }
+
+  if dataLabelKeywords.empty?
+    # If there's no data label keywords, no more work needed
+    return kws, false
+  else
+    # Otherwise, convert the data labels to eSchol unit format
+    # (e.g.) "uci (c-eschol-news)" to "news_uci"
+    dataLabelKeywords.map! { |dl|
+      match_strings = dl.match(/(.*) \(([^)]+)\)$/)
+      dl_campus = match_strings[1]
+      dl_unit = $dataLabelUnits[match_strings[2]]
+      dl = "#{dl_unit}_#{dl_campus}"
+    }.uniq
+
+    return standardKeywords, dataLabelKeywords
+  end
+end
+
+###################################################################################################
 def convertKeywords(kws)
   # Transform "1505 Marketing (for)" to just "Marketing"
   kws.map { |kw|
@@ -92,6 +126,7 @@ def convertKeywords(kws)
   }.uniq
   # eSchol has a 1k limit on keywords
   kws = kws.take(999)
+  return kws
 end
 
 ###################################################################################################
@@ -115,23 +150,10 @@ def parseMetadataEntries(feed)
     value = ent.text_at('value')
 
     # Multiple keywords are expected.
-    # These can be standard keywords or data labels for units
+    # These may include data labels for units, which are separated in elementsToJson
     if key == 'keywords'
-      # Check keyword for unit labels
-      unitAdded = false
-      dataLabelUnits.keys.each { |unitLabel|
-        if value =~ unitLabel
-          unitAdded = true
-          metaHash['dataLabelUnits'] ||= []
-          metaHash['dataLabelUnits'] << value
-          break
-        end
-      }
-      # If it's not a unit, add it to standard keywords
-      if not unitAdded
-        metaHash[key] ||= []
-        metaHash[key] << value
-      end
+      metaHash[key] ||= []
+      metaHash[key] << value
 
     # These keys may also be multiple; However, they aren't used in the PUT req.
     elsif key == 'subjects' || key == 'disciplines'
@@ -202,7 +224,7 @@ def convertFileVersion(fileVersion)
 end
 
 ###################################################################################################
-def assignSeries(data, completionDate, metaHash)
+def assignSeries(data, completionDate, metaHash, dataLabelUnits)
   # See https://docs.google.com/document/d/1U_DG-_iPOnS_Rp8Wu6COIgcNcicDtonOM9aZCCsJoQI/edit
   # for a prose description of our method here.
 
@@ -288,8 +310,8 @@ def assignSeries(data, completionDate, metaHash)
     a.sub(ucPPPat,'0').sub('lbnl_rw','1_rw').sub('rgpo_rw','2_rw').sub('lbnl_','3_rw').sub(rgpoPat,'zz') <=> b.sub(ucPPPat,'0').sub('lbnl_rw','1').sub('rgpo_rw','2').sub('lbnl_','3').sub(rgpoPat,'zz')
   }
 
-  # If present, convert data labels to units
-  seriesKeys.concat(data[:dataLabelUnits]) if data?(:dataLabelUnits)
+  # If the pub has data label units, append them
+  seriesKeys.concat(dataLabelUnits) if dataLabelUnits
 
   return data[:units] = seriesKeys
 end
@@ -416,6 +438,11 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
 
+  # If the pub has keywords, separate labels specifically used for unit asignment
+  if metaHash[:keywords]
+    metaHash[:keywords], dataLabelUnits = separateDataLabelUnitsFromKeywords(metaHash[:keywords])
+  end
+
   data[:type] = convertPubType(elementsPubType)
   data[:isPeerReviewed] = true  # assume all Elements items are peer reviewed
   if (elementsPubType == 'preprint' ||
@@ -450,7 +477,6 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?('fpage') and data[:fpage] = metaHash.delete('fpage')
   metaHash.key?('lpage') and data[:lpage] = metaHash.delete('lpage')
   metaHash.key?('keywords') and data[:keywords] = convertKeywords(metaHash.delete('keywords'))
-  metaHash.key?('dataLabelUnits') and data[:dataLabelUnits] = convertDataLabelUnits(metaHash.delete('dataLabelUnits'))
   if metaHash.key?('requested-reuse-licence.short-name')
     if metaHash['requested-reuse-licence.short-name'] != "No Licence"
       ccCode = metaHash.delete('requested-reuse-licence.short-name')
@@ -461,7 +487,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   #metaHash.key?('funder-type-display-name')
 
   # Context
-  assignSeries(data, getCompletionDate(data, metaHash), metaHash)
+  assignSeries(data, getCompletionDate(data, metaHash), metaHash, dataLabelUnits)
   lookupRepecID(elemPubID) and data[:localIDs] << { scheme: 'OTHER_ID', subScheme: 'repec', id: lookupRepecID(elemPubID) }
   metaHash.key?("report-number") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'report', id: metaHash.delete('report-number')
