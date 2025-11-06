@@ -130,18 +130,6 @@ def convertKeywords(kws)
 end
 
 ###################################################################################################
-def convertDataLabelUnits(dls)
-  # converts (e.g.) "uci (c-eschol-news)" to "news_uci"
-  dls.map! { |dl|
-    match_strings = s.match(/(.*) \(([^)]+)\)$/)
-    dl_campus = match_strings[1]
-    dl_unit = $dataLabelUnits[match_strings[2]]
-    dl = "#{dl_unit}_#{dl_campus}"
-  }.uniq
-  return dls
-end
-
-###################################################################################################
 def parseMetadataEntries(feed)
   metaHash = {}
 
