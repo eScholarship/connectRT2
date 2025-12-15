@@ -827,11 +827,18 @@ def checkDiff(old_data, new_data)
       old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
       new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
 
-      puts "\nOLD METADTA:"
-      puts old_diff
+      # puts "\nOLD METADTA:"
+      # puts old_diff
 
-      puts "\nNEW METADTA:"
-      puts new_diff
+      # puts "\nNEW METADTA:"
+      # puts new_diff
+
+      puts "Updating keys: #{new_diff.keys}"
+      if new_diff.has_key?(:authors)
+        if new_diff[:authors].length > 500
+          puts "Hyperauthor update"
+        end
+      end
 
       puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
       return true

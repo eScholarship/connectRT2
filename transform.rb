@@ -88,8 +88,8 @@ def convertKeywords(kws)
     # Remove scheme at end, and remove initial series of digits
     kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
   }.uniq
-  # eSchol has a 1k limit on keywords
   kws = kws.take(999)
+  return kws
 end
 
 ###################################################################################################
@@ -438,6 +438,9 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?("pmid") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'pmid', id: metaHash.delete('pmid')
   }
+  metaHash.key?("c-osti-id") and data[:localIDs] << {
+    scheme: 'OTHER_ID', subScheme: 'osti_id', id: metaHash.delete('c-osti-id')
+  }
   metaHash.key?("issn") and data[:issn] = metaHash.delete("issn")
   metaHash.key?("isbn-13") and data[:isbn] = metaHash.delete("isbn-13") # for books and chapters
   metaHash.key?("journal") and data[:journal] = metaHash.delete("journal")
@@ -735,6 +738,8 @@ def mimicDspaceXMLOutput(input_xml)
               node.replace(convert_local_id("pmid", node, noko_xml))
             when "report"
               node.replace(convert_local_id("report-number", node, noko_xml))
+            when "osti_id"
+              node.replace(convert_local_id("c-osti-id", node, noko_xml))
             else
               node.unlink()
             end
