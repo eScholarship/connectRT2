@@ -435,6 +435,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   metaHash.key?("report-number") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'report', id: metaHash.delete('report-number')
   }
+  puts "[INFO:PMID UPDATE FROM ELEMENTS] #{metaHash[:pmid]}" if metaHash.key?("pmid")
   metaHash.key?("pmid") and data[:localIDs] << {
     scheme: 'OTHER_ID', subScheme: 'pmid', id: metaHash.delete('pmid')
   }

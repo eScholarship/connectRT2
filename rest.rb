@@ -772,6 +772,19 @@ end
 # Checks the metadata update diff, returns T/F if updateis needed.
 def checkDiff(old_data, new_data)
 
+    # Prints the time 
+    def diff_time(msg)
+      puts "[INFO:DIFF] #{msg} #{Time.now.strftime('%H:%M:%S.%L')}"
+    end
+
+    # Prints the full diffs -- NOTE: This is slow.
+    def print_full_meta_dif(old_diff, new_diff)
+      puts "[INFO:DIFF] OLD METADATA"
+      puts old_diff
+      puts "[INFO:DIFF] NEW METADATA"
+      puts new_diff
+    end
+
     # Convert hash keys from symbols to strings
     def symbol_keys_to_string_keys(obj)
       return obj.inject({}){|memo,(k,v)| memo[k.to_s] = symbol_keys_to_string_keys(v); memo} if obj.is_a? Hash
@@ -779,7 +792,7 @@ def checkDiff(old_data, new_data)
       return obj
     end
 
-    puts "\n\nDIFF START: #{Time.now.strftime('%H:%M:%S.%L')}"
+    # diff_time("START")
 
     # Remove keys with nil values
     old_data = removeNils(old_data)
@@ -816,31 +829,34 @@ def checkDiff(old_data, new_data)
     }
 
     if old_data == new_data
-      puts "DIFF: Matching hashes."
-      puts "No anticipated diff. Skipping update."
-      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+      puts "[INFO:DIFF] Matching hashes. Skipping update."
+      # diff_time("END")
       return false
 
     else
-      puts "DIFF: Non-matching hashes. Updated needed."
+      puts "[INFO:DIFF] Non-matching hashes. Updated needed."
 
       old_diff = old_data.reject { |key, value| new_data.key?(key) && new_data[key] == value }
       new_diff = new_data.reject { |key, value| old_data.key?(key) && old_data[key] == value }
 
-      # puts "\nOLD METADTA:"
-      # puts old_diff
+      # Full metadata diff - NOTE THIS IS SLOW.
+      # print_full_meta_dif(old_diff, new_diff)
+      puts "[INFO:DIFF] Update Keys: #{new_diff.keys}"
 
-      # puts "\nNEW METADTA:"
-      # puts new_diff
-
-      puts "Updating keys: #{new_diff.keys}"
-      if new_diff.has_key?(:authors)
-        if new_diff[:authors].length > 500
-          puts "Hyperauthor update"
-        end
+      # Check for hyperauthor update
+      if new_diff.key?(:authors) && new_diff[:authors].length > 500
+        puts "[INFO:HYPERAUTHOR] #{new_diff[:authors].length}"
       end
 
-      puts "DIFF COMPLETE: #{Time.now.strftime('%H:%M:%S.%L')}\n\n"
+      # Check for PMID udpate
+      if new_diff.key?(:localIDs)
+        pmid_check = new_diff[:localIDs].select { |localID| 
+          localID[:subScheme] == 'pmid' }.map { |localID| 
+            localID[:id] }.first
+        puts "[INFO:PMID UPDATE TO ESCHOL] #{pmid_check}" if pmid_check != nil
+      end
+
+      # diff_time("END")
       return true
     end
 
@@ -869,7 +885,8 @@ def processMetaUpdate(requestURL, itemID, metaHash, feedFile)
     pubDate = data['published'] or raise("can't find old pub date")
     who = "elements@escholarship.org"
 
-    puts "Found: pubID=#{pubID.inspect}"
+    puts "[INFO:ESCHOL ID] #{itemID}"
+    puts "[INFO:ELEMENTS ID] #{pubID.inspect}"
 
     # Get the new data for comparison (jsonMeta = new data).
     oldData = {}
