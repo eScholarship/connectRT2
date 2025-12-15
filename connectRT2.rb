@@ -63,7 +63,7 @@ def sendErrorEmail(requestURL, subject, exc)
   htmlBody = textBody.gsub("\n", "<br/>")
   mail = Mail.new do
     from     "eschol@#{`/bin/hostname --fqdn`.strip}"
-    to       "Mahjabeen.Yucekul@ucop.edu"
+    to       ["Mahjabeen.Yucekul@ucop.edu", "devin.smith@ucop.edu"]
     subject  "#{$submitServer =~ /stg/ ? "Stage" : "Production"} #{subject}"
     text_part do
       content_type 'text/plain; charset=UTF-8'
