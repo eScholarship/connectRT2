@@ -1,9 +1,8 @@
 worker_timeout 120 # the default of 60 is usually hit on first startup, since this is a dev instance, we can wait
 worker_shutdown_timeout 90  # HTTP timeout is usually 60 sec, so give extra to be sure we don't drop any
 
-# The jschol memory leak has been very hard to track down, so a kludge is needed to
-# keep the app responsive. Previously we were using a cronjob to restart periodically,
-# but in a Beanstalk world it makes more sense to do it based on RAM consumption.
+# The following code is adapted from jschol.
+# See jschol/config/pumakiller.rb for more specifics
 def setupWorkerKiller
   require 'vmstat'
   require 'puma_worker_killer'
