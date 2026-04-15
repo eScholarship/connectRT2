@@ -1,0 +1,167 @@
+<rel:xml-relevance-scheme xmlns:rel="http://www.symplectic.co.uk/elements/xml-relevance-scheme">
+  <rel:category name="publication">
+    <!-- Mask: Used to skip irrelevant pubs. -->
+    <rel:masks>
+      <rel:mask name="default">
+        <!-- 1. Mask: Quick functions -->
+        <!-- Exclude any pub. without an eScholarship pub. record -->
+        <rel:exclude-objects-without-source>
+          <rel:source name="dspace" />
+        </rel:exclude-objects-without-source>
+        <!-- Exclude eScholarship source data for relevance -->
+        <rel:exclude-sources>
+          <rel:source name="dspace" />
+        </rel:exclude-sources>
+        <!-- Exclude Theses -->
+        <rel:exclude-objects-of-types>
+          <rel:type name="thesis-dissertation" />
+        </rel:exclude-objects-of-types>
+        <!-- 2. Mask: Object inspection -->
+        <!-- Anything *not* matching these conditions will be masked -->
+        <rel:inspect-object>
+          <rel:if>
+            <rel:condition operator="not">
+              <rel:condition operator="or">
+                <!-- Pub. has a manual record -->
+                <rel:condition argument-field="object.record-sources" operator="contains-any-of">manual</rel:condition>
+                <!-- OR pub has grant links -->
+                <rel:condition argument-field="object.approved-link-types" operator="contains-any-of">publication-grant-funded</rel:condition>
+              </rel:condition>
+            </rel:condition>
+            <!-- Result: mask object -->
+            <rel:result>
+              <rel:mask-object />
+            </rel:result>
+          </rel:if>
+        </rel:inspect-object>
+        <!-- END Object Inspection -->
+      </rel:mask>
+    </rel:masks>
+    <!-- Aggregation: (Disabled) Select the data sources to include for hashing -->
+    <!--
+      NOTE: The below is an example. if you don't specify
+      an aggregation step, the default data source order
+      from the Data Source Mgmt. page is used.
+    -->
+    <!-- <rel:aggregations>
+      <rel:aggregation name="manual-verified-only">
+        <rel:source-precedence>
+          <rel:source name="manual" partition="verified" />
+        </rel:source-precedence>
+      </rel:aggregation>
+    </rel:aggregations> -->
+    <!-- Post-Aggregation Mask: (Disabled) -->
+    <!--
+      NOTE: An additiona masking step can be used here, which
+      is evalutated *after* the metadata has been selected
+      in the aggregation step. See the documentation for details.
+    -->
+    <!-- Hash Def: Used to calculate the hash value -->
+    <rel:hash-definitions>
+      <rel:hash-definition name="default">
+        <rel:value from="title" />
+        <rel:value from="authors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="parent-title" />
+        <rel:value from="abstract" />
+        <rel:value from="editors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="publisher" />
+        <rel:value from="publication-status" />
+        <rel:value from="publication-date" />
+        <rel:value from="isbn-10" />
+        <rel:value from="isbn-13" />
+        <rel:value from="issn" />
+        <rel:value from="eissn" />
+        <rel:value from="journal" />
+        <rel:value from="volume" />
+        <rel:value from="issue" />
+        <rel:value from="pagination" />
+        <rel:value from="doi" />
+        <rel:value from="number" />
+        <rel:value from="object.labels" />
+        <rel:value from="c-custom-citation" />
+        <rel:link-types>
+          <rel:link-type name="publication-user-authorship" />
+          <rel:link-type name="publication-grant-funded" />
+        </rel:link-types>
+      </rel:hash-definition>
+
+      <rel:hash-definition name="include-pmids">
+        <rel:value from="title" />
+        <rel:value from="authors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="parent-title" />
+        <rel:value from="abstract" />
+        <rel:value from="editors">
+          <rel:data-part name="person:lastname" />
+          <rel:data-part name="person:firstnames" />
+          <rel:data-part name="person:identifier">
+            <rel:data-part name="identifier:value" />
+          </rel:data-part>
+        </rel:value>
+        <rel:value from="publisher" />
+        <rel:value from="publication-status" />
+        <rel:value from="publication-date" />
+        <rel:value from="isbn-10" />
+        <rel:value from="isbn-13" />
+        <rel:value from="issn" />
+        <rel:value from="eissn" />
+        <rel:value from="journal" />
+        <rel:value from="volume" />
+        <rel:value from="issue" />
+        <rel:value from="pagination" />
+        <rel:value from="doi" />
+        <rel:value from="external-identifiers">
+          <rel:data-part name="identifier:scheme" />
+        </rel:value>
+        <rel:value from="number" />
+        <rel:value from="object.labels" />
+        <rel:value from="c-custom-citation" />
+        <rel:link-types>
+          <rel:link-type name="publication-user-authorship" />
+          <rel:link-type name="publication-grant-funded" />
+        </rel:link-types>
+      </rel:hash-definition>
+
+    </rel:hash-definitions>
+    <!-- Relevance Definition Selector -->
+    <!--
+      NOTE: This section is evaluated *first*. You can include
+      logic conditions, along with the "choose" function to
+      select different masks, aggregations, post-aggregation masks,
+      and hash definitions for publications meeting various criteria.
+      (e.g. pubs with manual data sorces, or type 'monograph', etc.)
+    -->
+    <rel:relevance-definition-selector>
+      <rel:choose>
+        <rel:when>
+          <rel:condition argument-field="object.record-sources" operator="contains-any-of">pubmed</rel:condition>
+            <rel:result>
+              <rel:relevance-definition-selection mask="default" hash-definition="include-pmids" />
+            </rel:result>
+        </rel:when>
+        <rel:otherwise>
+          <rel:result>
+            <rel:relevance-definition-selection mask="default" hash-definition="default" />
+          </rel:result>
+        </rel:otherwise>
+      </rel:choose>
+    </rel:relevance-definition-selector>
+  </rel:category>
+</rel:xml-relevance-scheme>
