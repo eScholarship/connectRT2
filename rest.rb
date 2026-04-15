@@ -1174,7 +1174,7 @@ get "/dspace-oai" do
       </OAI-PMH>''', binding)
   else
     # Proxy the OAI query over to the eschol API server, and return its results
-    headers = { 'Privileged' => $privApiKey, $cdlUserAgent}
+    headers = { 'Privileged' => $privApiKey, 'user-agent' => $cdlUserAgent}
     ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
     response = HTTParty.get("#{$escholServer}/oai", query: params, headers: headers)
     content_type response.headers['Content-Type']
