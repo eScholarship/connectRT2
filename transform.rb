@@ -88,6 +88,8 @@ def convertKeywords(kws)
     # Remove scheme at end, and remove initial series of digits
     kw.sub(%r{ \([^)]+\)$}, '').sub(%r{^\d+ }, '')
   }.uniq
+
+  # Safety limit on keyword array (a data-entry errored pub had thousands)
   kws = kws.take(999)
   return kws
 end
