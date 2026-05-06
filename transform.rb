@@ -387,6 +387,7 @@ def elementsToJSON(oldData, elemPubID, submitterEmail, metaHash, ark, feedFile)
   elementsIsReviewed = metaHash.delete('is-reviewed') || nil
   
   data[:isPeerReviewed] = getDefaultPeerReview(elementsIsReviewed, elementsPubType, elementsPubStatus)
+  data[:type] = convertPubType(elementsPubType)
   data[:pubRelation] = convertPubStatus(metaHash.delete('publication-status'))
   
   embargo = assignEmbargo(metaHash)
