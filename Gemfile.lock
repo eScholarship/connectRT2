@@ -38,7 +38,7 @@ GEM
       ruby2_keywords (~> 0.0.1)
     mysql2 (0.5.7)
       bigdecimal
-    net-imap (0.6.3)
+    net-imap (0.6.4)
       date
       net-protocol
     net-pop (0.1.2)
@@ -89,7 +89,7 @@ GEM
       tilt (~> 2.0)
     sqlite3 (2.9.0-x86_64-linux-gnu)
     tilt (2.7.0)
-    timeout (0.6.0)
+    timeout (0.6.1)
     unindent (1.0)
     vmstat (2.3.1)
     xml-simple (1.1.9)
