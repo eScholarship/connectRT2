@@ -395,10 +395,16 @@ def calcContentReadKey(itemID, contentPath)
 end
 
 ###################################################################################################
-def filePreviewLink(itemID, contentPath)
+def filePreviewLink(itemID, contentPath, suppFile = false)
   server = "https://#{request.host}"
   key = calcContentReadKey(itemID, contentPath)
-  return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+
+  # return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+  
+  if not suppFile:
+    return "#{$escholServer}/content/#{itemID}/#{itemID}.pdf"
+  else:
+    return "#{$escholServer}/#{contentPath}"
 end
 
 ###################################################################################################
@@ -465,7 +471,7 @@ def formatItemData(data, expand)
     (data['suppFiles'] || []).each { |supp|
         arr << { id: "#{itemID}/content/supp/#{CGI.escape(supp['file'])}",
                  name: supp['file'], size: supp['size'],
-                 link: filePreviewLink(itemID, "content/supp/#{CGI.escape(supp['file'])}"),
+                 link: filePreviewLink(itemID, "content/supp/#{CGI.escape(supp['file'])}", true),
                  type: supp['contentType'] }
     }
     bitstreams = arr.map.with_index { |info, idx|
