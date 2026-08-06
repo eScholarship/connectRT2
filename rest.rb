@@ -397,14 +397,19 @@ end
 ###################################################################################################
 def filePreviewLink(itemID, contentPath, suppFile = false)
   server = "https://#{request.host}"
-  key = calcContentReadKey(itemID, contentPath)
 
+  # Old method for posterity
+  # key = calcContentReadKey(itemID, contentPath)
   # return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
   
-  if not suppFile:
+  if !suppFile
     return "#{$escholServer}/content/#{itemID}/#{itemID}.pdf"
-  else:
-    return "#{$escholServer}/#{contentPath}"
+  else
+    supp_path = contentPath.split("/")
+    supp_path.insert(1, itemID)
+    supp_path = supp_path.join("/")
+    return "#{$escholServer}/#{supp_path}"
+  end
 end
 
 ###################################################################################################
