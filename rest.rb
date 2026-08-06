@@ -34,6 +34,8 @@ $privApiKey = ENV['ESCHOL_PRIV_API_KEY'] or raise("missing env ESCHOL_PRIV_API_K
 $rt2Email = ENV['RT2_DSPACE_EMAIL'] or raise("missing env RT2_DSPACE_EMAIL")
 $rt2Password = ENV['RT2_DSPACE_PASSWORD'] or raise("missing env RT2_DSPACE_PASSWORD")
 
+$cdlUserAgent = ENV['CDL_USER_AGENT'] or raise("missing env CDL_USER_AGENT")
+
 $feedTmpDir = "#{$homeDir}/apache/htdocs/bitstreamTmp"
 
 ###################################################################################################
@@ -150,7 +152,7 @@ def accessAPIQuery(query, vars = {}, privileged = false)
     query = "query(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{query} }"
   end
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
-  headers = { 'Content-Type' => 'application/json' }
+  headers = { 'Content-Type' => 'application/json', 'user-agent' => $cdlUserAgent }
   privileged and headers['Privileged'] = $privApiKey
   ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
 
@@ -192,7 +194,7 @@ end
 def submitAPIMutation(mutation, vars)
   query = "mutation(#{vars.map{|name, pair| "$#{name}: #{pair[0]}"}.join(", ")}) { #{mutation} }"
   varHash = Hash[vars.map{|name,pair| [name.to_s, pair[1]]}]
-  headers = { 'Content-Type' => 'application/json' }
+  headers = { 'Content-Type' => 'application/json', 'user-agent' => $cdlUserAgent }
   headers['Privileged'] = $privApiKey
   ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
   response = HTTParty.post("#{$escholServer}/graphql",
@@ -393,10 +395,16 @@ def calcContentReadKey(itemID, contentPath)
 end
 
 ###################################################################################################
-def filePreviewLink(itemID, contentPath)
+def filePreviewLink(itemID, contentPath, suppFile = false)
   server = "https://#{request.host}"
   key = calcContentReadKey(itemID, contentPath)
-  return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+
+  # return "#{server}/dspace-preview/#{itemID}/#{contentPath}?key=#{key}"
+  
+  if not suppFile:
+    return "#{$escholServer}/content/#{itemID}/#{itemID}.pdf"
+  else:
+    return "#{$escholServer}/#{contentPath}"
 end
 
 ###################################################################################################
@@ -463,7 +471,7 @@ def formatItemData(data, expand)
     (data['suppFiles'] || []).each { |supp|
         arr << { id: "#{itemID}/content/supp/#{CGI.escape(supp['file'])}",
                  name: supp['file'], size: supp['size'],
-                 link: filePreviewLink(itemID, "content/supp/#{CGI.escape(supp['file'])}"),
+                 link: filePreviewLink(itemID, "content/supp/#{CGI.escape(supp['file'])}", true),
                  type: supp['contentType'] }
     }
     bitstreams = arr.map.with_index { |info, idx|
@@ -1172,7 +1180,7 @@ get "/dspace-oai" do
       </OAI-PMH>''', binding)
   else
     # Proxy the OAI query over to the eschol API server, and return its results
-    headers = { 'Privileged' => $privApiKey }
+    headers = { 'Privileged' => $privApiKey, 'user-agent' => $cdlUserAgent}
     ENV['ESCHOL_ACCESS_COOKIE'] and headers['Cookie'] = "ACCESS_COOKIE=#{ENV['ESCHOL_ACCESS_COOKIE']}"
     response = HTTParty.get("#{$escholServer}/oai", query: params, headers: headers)
     content_type response.headers['Content-Type']
