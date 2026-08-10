@@ -25,7 +25,7 @@ GEM
       csv
       mini_mime (>= 1.0.0)
       multi_xml (>= 0.5.2)
-    json (2.19.2)
+    json (2.19.9)
     json-diff (0.4.1)
     listen (3.10.0)
       logger
