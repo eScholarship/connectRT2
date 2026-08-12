@@ -22,7 +22,7 @@ $groupToCampus = { 684 => 'lbnl',
                    1254 => 'anrcs',
                    1164 => 'ucop' }
 
-$rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI"]
+$rgpoPrograms = ["CBCRP", "CHRP", "TRDRP", "UCRI", "CAI", "CFCPRP"]
 
 ###################################################################################################
 $repecIDs = {}
